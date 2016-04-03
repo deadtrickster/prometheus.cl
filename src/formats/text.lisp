@@ -1,0 +1,65 @@
+(in-package #:cl-user)
+
+(defpackage #:prometheus.text
+  (:use #:cl #:alexandria)
+  (:nicknames #:prom.text)
+  (:export #:+content-type+
+           #:marshal))
+
+(in-package #:prometheus.text)
+
+(define-constant +content-type+ "text/plain; version=0.0.4" :test #'equal)
+
+(defmethod catch-strange-float (value)
+  value)
+
+(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+  "+Inf")
+
+(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-negative-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-negative-INFINITY)))
+  "-Inf")
+
+(defun print-sample-line (stream name lables lvalues value)
+  (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar #'list lables lvalues) value))
+
+(defgeneric metric-to-text (metric name family-lables stream)
+  (:method ((metric prom:simple-metric) name family-lables stream)
+    (let ((*read-default-float-format* 'double-float))
+      (print-sample-line stream name family-lables (prom:metric-labels metric) (prom:metric-value metric))))
+  (:method ((metric prom:histogram-metric) name labels stream)
+    (let ((bucket-name (concatenate 'string name "_bucket"))
+          (le-labels (append labels (list "le")))
+          (counter 0))
+      (loop for bucket across (prom:metric-value metric)
+            do
+               (print-sample-line stream bucket-name le-labels (append (prom:metric-labels metric) (list (catch-strange-float (prom:bucket-bound bucket)))) (incf counter (prom:bucket-count bucket))))
+      (print-sample-line stream
+                         (concatenate 'string name "_sum")
+                         labels
+                         (prom:metric-labels metric)
+                         (prom:histogram-sum metric))
+      (print-sample-line stream
+                         (concatenate 'string name "_count")
+                         labels
+                         (prom:metric-labels metric)
+                         counter))))
+
+
+(defgeneric metric-family-to-text (mf stream)
+  (:method ((mf prom::metric-family) stream)
+    (let ((name (prom::metric-family-name mf))
+          (labels (prom:metric-family-labels mf)))
+      (format stream "# TYPE ~a ~a~%" name (prom:metric-family-type mf))
+      (format stream "# HELP ~a ~a~%" name (prom:metric-family-help mf))
+      (loop for metric in (prom::get-metrics mf) do
+            (metric-to-text metric name labels stream)))))
+
+(defgeneric marshal% (registry)
+  (:method ((registry prom:registry))
+    (with-output-to-string (stream)
+      (prom::collect registry
+        (lambda (mf)
+          (metric-family-to-text mf stream))))))
+
+(defun marshal (&optional (registry prom:*default-registry*))
+  (marshal% registry))

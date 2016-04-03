@@ -1,0 +1,29 @@
+(in-package :cl-user)
+
+(defpackage :prometheus.test.system
+  (:use :cl :asdf))
+
+(in-package :prometheus.test.system)
+
+(defsystem :prometheus.test
+  :version "0.1"
+  :description "Tests for prometheus.cl"
+  :maintainer "Ilya Khaprov <ilya.khaprov@publitechs.com>"
+  :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"
+  :licence "MIT"
+  :depends-on ("prometheus"
+               "prove"
+               "log4cl"
+               "mw-equiv"
+               "cl-interpol")
+  :serial t
+  :components ((:module "t"
+                :serial t
+                :components
+                ((:file "package")
+                 (:test-file "dummy")
+                 (:test-file "basic"))))
+  :defsystem-depends-on (:prove-asdf)
+  :perform (test-op :after (op c)
+                    (funcall (intern #.(string :run-test-system) :prove-asdf) c)
+                    (asdf:clear-system c)))
