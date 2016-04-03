@@ -2,4 +2,5 @@
 
 (defpackage #:prometheus.hunchentoot
   (:use #:cl #:alexandria)
-  (:nicknames #:prom.tbnl))
+  (:nicknames #:prom.tbnl)
+  (:export #:exposer))
