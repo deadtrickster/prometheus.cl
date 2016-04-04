@@ -4,7 +4,7 @@
   :licence "MIT"
   :depends-on ("prometheus")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
-  :components ((:module "sbcl"
+  :components ((:module "collectors/sbcl"
                 :serial t
                 :components
                 ((:file "package")

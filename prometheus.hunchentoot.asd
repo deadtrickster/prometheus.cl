@@ -4,7 +4,7 @@
   :licence "MIT"
   :depends-on ("prometheus" "hunchentoot")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
-  :components ((:module "http"
+  :components ((:module "exposers/http"
                 :serial t
                 :components
                 ((:module "hunchentoot"
