@@ -1,11 +1,11 @@
 - [-] Version 0.1
   - [X] Simple Summary
   - [X] Labels validation
+  - [X] Process Info Collector
   - [ ] Errors hierarchy
   - [ ] Tests
   - [ ] Travis CI setup
   - [ ] Coveralls setup
-  - [ ] Process Info Collector
 - [ ] Version 0.2
   - [ ] Pushgateway
   - [ ] Benchmarks
