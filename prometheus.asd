@@ -3,7 +3,8 @@
   :version "0.0.1"
   :licence "MIT"
   :depends-on ("alexandria"
-               "bordeaux-threads")
+               "bordeaux-threads"
+               "cl-ppcre")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
   :components ((:module "src"
                 :serial t
