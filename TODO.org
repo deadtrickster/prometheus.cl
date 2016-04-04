@@ -3,14 +3,13 @@
   - [X] Labels validation
   - [ ] Errors hierarchy
   - [ ] Tests
-  - [ ] Locks cleanup
   - [ ] Travis CI setup
   - [ ] Coveralls setup
   - [ ] Enhance SBCL Collector
-  - [ ] Hunchentoot Collector
 - [ ] Version 0.2
   - [ ] Pushgateway
   - [ ] Benchmarks
+  - [ ] Locks cleanup
   - [ ] Maybe optimize no-labels case
 - [ ] Version 0.3
   - [ ] Full Summary implementation
