@@ -1,6 +1,6 @@
 - [-] Version 0.1
   - [X] Simple Summary
-  - [ ] Labels validation
+  - [X] Labels validation
   - [ ] Tests
   - [ ] Locks cleanup
   - [ ] Travis CI setup
