@@ -24,7 +24,8 @@
                   :components
                   ((:file "counter")
                    (:file "gauge")
-                   (:file "histogram")))
+                   (:file "histogram")
+                   (:file "summary")))
                  (:module "formats"
                   :serial t
                   :components

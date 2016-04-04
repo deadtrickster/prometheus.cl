@@ -35,4 +35,9 @@
            #:histogram-metric
            #:histogram-sum
            #:make-histogram
-           #:histogram.observe))
+           #:histogram.observe
+           #:summary
+           #:summary-metric
+           #:summary-sum
+           #:make-summary
+           #:summary.observe))
