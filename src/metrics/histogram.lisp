@@ -17,7 +17,7 @@
   (:default-initargs :type "histogram"))
 
 (defclass histogram-metric (metric)
-  ((sum :initform 0.0d0 :reader histogram-sum)))
+  ((sum :initform 0 :reader histogram-sum)))
 
 (defmethod mf-make-metric ((metric histogram) labels)
   (make-instance 'histogram-metric :labels labels
