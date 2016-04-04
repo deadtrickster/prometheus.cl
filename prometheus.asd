@@ -4,7 +4,8 @@
   :licence "MIT"
   :depends-on ("alexandria"
                "bordeaux-threads"
-               "cl-ppcre")
+               "cl-ppcre"
+               "local-time")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
   :components ((:module "src"
                 :serial t
@@ -15,7 +16,8 @@
                   :components
                   ((:file "synchronizable")
                    (:file "collectable")
-                   (:file "metrics-storage")))
+                   (:file "metrics-storage")
+                   (:file "timing")))
                  (:file "labels")
                  (:file "metric")
                  (:file "collector")
