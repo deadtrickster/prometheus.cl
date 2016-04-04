@@ -34,3 +34,8 @@
     (when registry
       (register summary registry))
     summary))
+
+(defmacro summary.time (summary &body body)
+  `(timing% (lambda (time)
+              (summary.observe ,summary time))
+            (lambda () ,@body)))

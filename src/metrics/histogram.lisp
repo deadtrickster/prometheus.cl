@@ -61,3 +61,8 @@
     (when registry
       (register histogram registry))
     histogram))
+
+(defmacro histogram.time (histogram &body body)
+  `(timing% (lambda (time)
+              (histogram.observe ,histogram time))
+            (lambda () ,@body)))

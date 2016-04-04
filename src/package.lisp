@@ -36,8 +36,10 @@
            #:histogram-sum
            #:make-histogram
            #:histogram.observe
+           #:histogram.time
            #:summary
            #:summary-metric
            #:summary-sum
            #:make-summary
-           #:summary.observe))
+           #:summary.observe
+           #:summary.time))
