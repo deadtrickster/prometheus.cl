@@ -1,4 +1,4 @@
-# Prometheus.io Client
+# Prometheus.io Common Lisp Client
 
 Example Grafana dashboard for Hunchentoot on SBCL:
 
@@ -16,6 +16,15 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 ### SBCL runtime information
  - Threads
  - Memory
+ 
+### Process information
+ - Open fds count
+ - Max fds count
+ - Virtual memory bytes
+ - Resident memory bytes
+ - Process CPU seconds{stime|utime} (total)
+ 
+Linux? only
 
 ## Exposers
 
