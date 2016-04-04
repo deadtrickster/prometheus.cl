@@ -42,7 +42,18 @@
                          (concatenate 'string name "_count")
                          labels
                          (prom:metric-labels metric)
-                         counter))))
+                         counter)))
+  (:method ((metric prom:summary-metric) name labels stream)
+    (print-sample-line stream
+                       (concatenate 'string name "_sum")
+                       labels
+                       (prom:metric-labels metric)
+                       (prom:summary-sum metric))
+    (print-sample-line stream
+                       (concatenate 'string name "_count")
+                       labels
+                       (prom:metric-labels metric)
+                       (prom:metric-value metric))))
 
 
 (defgeneric metric-family-to-text (mf stream)
