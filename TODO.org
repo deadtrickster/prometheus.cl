@@ -1,0 +1,15 @@
+- [ ] Version 0.1
+  - [ ] Simple Summary
+  - [ ] Labels validation
+  - [ ] Tests
+  - [ ] Locks cleanup
+  - [ ] Travis CI setup
+  - [ ] Coveralls setup
+  - [ ] Enhance SBCL Collector
+  - [ ] Hunchentoot Collector
+- [ ] Version 0.2
+  - [ ] Pushgateway
+  - [ ] Benchmarks
+  - [ ] Maybe optimize no-labels case
+- [ ] Version 0.3
+  - [ ] Full Summary implementation
