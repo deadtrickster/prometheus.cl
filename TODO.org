@@ -5,7 +5,7 @@
   - [ ] Tests
   - [ ] Travis CI setup
   - [ ] Coveralls setup
-  - [ ] Enhance SBCL Collector
+  - [ ] Process Info Collector
 - [ ] Version 0.2
   - [ ] Pushgateway
   - [ ] Benchmarks
