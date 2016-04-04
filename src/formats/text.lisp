@@ -20,7 +20,8 @@
   "-Inf")
 
 (defun print-sample-line (stream name lables lvalues value)
-  (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar #'list lables lvalues) value))
+  (let ((*read-default-float-format* 'double-float))
+    (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar #'list lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
 
 (defgeneric metric-to-text (metric name family-lables stream)
   (:method ((metric prom:simple-metric) name family-lables stream)
