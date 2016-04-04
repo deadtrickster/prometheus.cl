@@ -1,0 +1,91 @@
+(in-package #:prometheus.process)
+
+(defclass process-collector (prom:collector)
+  ((page-size :initarg :page-size :reader page-size)
+   (ticks :initarg :ticks :reader ticks)
+   (btime :initarg :btime :reader btime)))
+
+(defun get-btime ()
+  (when-let ((info-line
+              (with-open-file (stream "/proc/stat")
+                (loop
+                  as line = (read-line stream nil) do
+                     (unless line
+                       (return))
+                     (if (starts-with-subseq "btime" line)
+                         (return line))))))
+    (parse-integer (elt (split-sequence #\Space info-line :remove-empty-subseqs t) 1))))
+
+(defun make-process-collector (&key (namespace "") (name "process_collector") (registry prom:*default-registry*))
+  (let ((collector (make-instance 'process-collector :namespace namespace
+                                                     :name name
+                                                     :page-size (or (ignore-errors
+                                                                     (sysconf +_sc_pagesize+))
+                                                                    4096)
+                                                     :ticks (ignore-errors
+                                                             (sysconf +_sc_clk_tck+))
+                                                     :btime (ignore-errors
+                                                             (get-btime)))))
+    (when registry
+      (prom:register collector registry))
+    collector))
+
+(defun get-open-fds-count ()
+  (length (cl-fad:list-directory "/proc/self/fd")))
+
+(defun get-max-fds-count ()
+  (when-let ((info-line
+              (with-open-file (stream "/proc/self/limits")
+                (loop
+                  as line = (read-line stream nil) do
+                     (unless line
+                       (return))
+                     (if (starts-with-subseq "Max open file" line)
+                         (return line))))))
+    (elt (split-sequence #\Space info-line :remove-empty-subseqs t) 3)))
+
+(defun read-stat ()
+  (with-open-file (stream "/proc/self/stat")
+    (split-sequence #\Space
+                    (elt (split-sequence #\) (read-line stream)) 1)
+                    :remove-empty-subseqs t)))
+
+(defmethod prom:collect ((pc process-collector) cb)
+  (when (and (btime pc)
+             (cl-fad:file-exists-p "/proc/self"))
+    ;;fds
+    (ignore-errors
+     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_open_fds")
+                                  :help "Number of open file descriptors."
+                                  :value (get-open-fds-count)
+                                  :registry nil))))
+  (ignore-errors
+   (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_max_fds")
+                                :help "Maximum number of open file descriptors."
+                                :value (get-max-fds-count)
+                                :registry nil)))
+  ;;stat
+  (ignore-errors
+   (let ((stat (read-stat)))
+     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_virtual_memory_bytes")
+                                  :help "Virtual memory size in bytes."
+                                  :value (elt stat 20)
+                                  :registry nil))
+     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_resident_memory_bytes")
+                                  :help "Resident memory size in bytes."
+                                  :value (* (page-size pc) (parse-integer (elt stat 21)))
+                                  :registry nil))
+
+     (let ((utime (/ (parse-integer (elt stat 11)) (ticks pc)))
+           (stime (/ (parse-integer (elt stat 12)) (ticks pc)))
+           (c (prom:make-counter :name (prom:collector-metric-name pc "process_cpu_seconds")
+                                 :help "Process CPU seconds."
+                                 :labels '("time")
+                                 :registry nil)))
+       (prom:counter.inc c :value (coerce utime 'double-float) :labels '("utime"))
+       (prom:counter.inc c :value (coerce stime 'double-float) :labels '("stime"))
+       (funcall cb c)
+       (funcall cb (prom:make-counter :name (prom:collector-metric-name pc "process_cpu_seconds_total")
+                                      :help "Process CPU seconds total."
+                                      :value (coerce (+ utime stime) 'double-float)
+                                      :registry nil))))))
