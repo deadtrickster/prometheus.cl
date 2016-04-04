@@ -1,5 +1,5 @@
-- [ ] Version 0.1
-  - [ ] Simple Summary
+- [-] Version 0.1
+  - [X] Simple Summary
   - [ ] Labels validation
   - [ ] Tests
   - [ ] Locks cleanup
