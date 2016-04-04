@@ -25,6 +25,7 @@ http_requests{request_type=\"get\"} 1
 - Counter
 - Gauge
 - Histogram
+- Summary (without quantiles for now)
 
 ## Custom collectors
 
