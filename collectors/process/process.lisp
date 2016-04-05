@@ -1,9 +1,17 @@
 (in-package #:prometheus.process)
 
+(defconstant +lisp-epoch-start+ 2208988800)
+
 (defclass process-collector (prom:collector)
   ((page-size :initarg :page-size :reader page-size)
    (ticks :initarg :ticks :reader ticks)
-   (btime :initarg :btime :reader btime)))
+   (start-time :initarg :start-time :reader start-time)))
+
+(defun read-stat ()
+  (with-open-file (stream "/proc/self/stat")
+    (split-sequence #\Space
+                    (elt (split-sequence #\) (read-line stream)) 1)
+                    :remove-empty-subseqs t)))
 
 (defun get-btime ()
   (when-let ((info-line
@@ -16,6 +24,13 @@
                          (return line))))))
     (parse-integer (elt (split-sequence #\Space info-line :remove-empty-subseqs t) 1))))
 
+(defun get-ticks ()
+  (sysconf +_sc_clk_tck+))
+
+(defun get-start-time ()
+  (let ((stat (read-stat)))
+    (+ (round (/ (parse-integer (elt stat 19)) (get-ticks))) (get-btime))))
+
 (defun make-process-collector (&key (namespace "") (name "process_collector") (registry prom:*default-registry*))
   (let ((collector (make-instance 'process-collector :namespace namespace
                                                      :name name
@@ -23,9 +38,9 @@
                                                                      (sysconf +_sc_pagesize+))
                                                                     4096)
                                                      :ticks (ignore-errors
-                                                             (sysconf +_sc_clk_tck+))
-                                                     :btime (ignore-errors
-                                                             (get-btime)))))
+                                                             (get-ticks))
+                                                     :start-time (ignore-errors
+                                                                  (get-start-time)))))
     (when registry
       (prom:register collector registry))
     collector))
@@ -44,14 +59,8 @@
                          (return line))))))
     (elt (split-sequence #\Space info-line :remove-empty-subseqs t) 3)))
 
-(defun read-stat ()
-  (with-open-file (stream "/proc/self/stat")
-    (split-sequence #\Space
-                    (elt (split-sequence #\) (read-line stream)) 1)
-                    :remove-empty-subseqs t)))
-
 (defmethod prom:collect ((pc process-collector) cb)
-  (when (and (btime pc)
+  (when (and (start-time pc)
              (cl-fad:file-exists-p "/proc/self"))
     ;;fds
     (ignore-errors
@@ -64,9 +73,21 @@
                                 :help "Maximum number of open file descriptors."
                                 :value (get-max-fds-count)
                                 :registry nil)))
+
+
+  (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_start_time_seconds")
+                               :help "Start time of the process since unix epoch in seconds."
+                               :value (start-time pc)
+                               :registry nil))
+  (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_uptime_seconds")
+                               :help "Process uptime in seconds."
+                               :value (- (get-universal-time) (start-time pc) +lisp-epoch-start+)
+                               :registry nil))
+
   ;;stat
   (ignore-errors
    (let ((stat (read-stat)))
+
      (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_virtual_memory_bytes")
                                   :help "Virtual memory size in bytes."
                                   :value (elt stat 20)
