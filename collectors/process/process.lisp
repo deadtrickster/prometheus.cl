@@ -88,7 +88,7 @@
   (ignore-errors
    (let ((stat (read-stat)))
 
-     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_threads_count")
+     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_threads_total")
                                   :help "Process Threads count."
                                   :value (elt stat 19)
                                   :registry nil))

@@ -11,7 +11,7 @@
 
 
 (defmethod prom:collect ((tc threads-collector) cb)
-  (funcall cb (prom:make-gauge :name (prom:collector-metric-name tc "sbcl_threads_count")
+  (funcall cb (prom:make-gauge :name (prom:collector-metric-name tc "sbcl_threads")
                                :help "SBCL Threads Count"
                                :value (length (sb-thread:list-all-threads))
                                :registry nil)))

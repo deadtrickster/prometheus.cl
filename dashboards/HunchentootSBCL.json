@@ -315,7 +315,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sbcl_threads_count",
+              "expr": "sbcl_threads",
               "intervalFactor": 2,
               "legendFormat": "SBCL threads",
               "metric": "sbcl_threads_count",
@@ -323,7 +323,7 @@
               "step": 2
             },
             {
-              "expr": "process_threads_count",
+              "expr": "process_threads_total",
               "intervalFactor": 2,
               "legendFormat": "Native threads",
               "metric": "process_threads_count",
@@ -598,6 +598,6 @@
   },
   "refresh": "10s",
   "schemaVersion": 8,
-  "version": 4,
+  "version": 5,
   "links": []
 }
