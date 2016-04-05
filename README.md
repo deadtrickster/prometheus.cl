@@ -23,6 +23,8 @@ Example Grafana dashboard for Hunchentoot on SBCL:
  - Virtual memory bytes
  - Resident memory bytes
  - Process CPU seconds{stime|utime} (total)
+ - Process start time (Unix epoch)
+ - Process uptime
  
 Linux? only
 
