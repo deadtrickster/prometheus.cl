@@ -80,7 +80,7 @@
           "x-axis": true,
           "y-axis": true,
           "y_formats": [
-            "none",
+            "rps",
             "short"
           ]
         }
@@ -158,7 +158,7 @@
           "x-axis": true,
           "y-axis": true,
           "y_formats": [
-            "none",
+            "ms",
             "short"
           ]
         }
@@ -222,6 +222,10 @@
             {
               "alias": "Total Dynamic Objects (Millions)",
               "yaxis": 2
+            },
+            {
+              "alias": "Total Dynamic Objects",
+              "yaxis": 2
             }
           ],
           "span": 6,
@@ -229,18 +233,18 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(sbcl_dynamic_bytes)/1048576",
+              "expr": "sum(sbcl_dynamic_bytes)",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "Total Dynamic Bytes (Mb)",
+              "legendFormat": "Total Dynamic Bytes",
               "metric": "sbcl_dynamic_bytes",
               "refId": "F",
               "step": 2
             },
             {
-              "expr": "sum(sbcl_dynamic_objects)/1000000",
+              "expr": "sum(sbcl_dynamic_objects)",
               "intervalFactor": 2,
-              "legendFormat": "Total Dynamic Objects (Millions)",
+              "legendFormat": "Total Dynamic Objects",
               "refId": "A",
               "step": 2
             }
@@ -256,8 +260,8 @@
           "x-axis": true,
           "y-axis": true,
           "y_formats": [
-            "mbytes",
-            "none"
+            "bytes",
+            "short"
           ]
         },
         {
@@ -346,8 +350,10 @@
           "y-axis": true,
           "y_formats": [
             "short",
-            "short"
-          ]
+            "percent"
+          ],
+          "leftYAxisLabel": "Threads",
+          "rightYAxisLabel": "CPU"
         }
       ],
       "title": "New row"
@@ -379,7 +385,7 @@
           "height": "",
           "id": 7,
           "isNew": true,
-          "leftYAxisLabel": "Megabytes",
+          "leftYAxisLabel": "",
           "legend": {
             "avg": false,
             "current": false,
@@ -403,7 +409,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"instance\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"instance\"}",
               "intervalFactor": 2,
               "legendFormat": "Instance",
               "metric": "sbcl_dynamic_bytes",
@@ -411,35 +417,35 @@
               "step": 2
             },
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"cons\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"cons\"}",
               "intervalFactor": 2,
               "legendFormat": "Cons",
               "refId": "B",
               "step": 2
             },
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"simple-vector\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"simple-vector\"}",
               "intervalFactor": 2,
               "legendFormat": "Simple Vector",
               "refId": "C",
               "step": 2
             },
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"simple-character-string\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"simple-character-string\"}",
               "intervalFactor": 2,
               "legendFormat": "Simple Character String",
               "refId": "D",
               "step": 2
             },
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"code\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"code\"}",
               "intervalFactor": 2,
               "legendFormat": "Code",
               "refId": "E",
               "step": 2
             },
             {
-              "expr": "sbcl_dynamic_bytes{object_type=\"other\"}/1048576",
+              "expr": "sbcl_dynamic_bytes{object_type=\"other\"}",
               "intervalFactor": 2,
               "legendFormat": "Other",
               "refId": "F",
@@ -457,7 +463,7 @@
           "x-axis": true,
           "y-axis": true,
           "y_formats": [
-            "mbytes",
+            "bytes",
             "short"
           ]
         },
@@ -503,7 +509,7 @@
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
-          "rightYAxisLabel": "FDs",
+          "rightYAxisLabel": "",
           "seriesOverrides": [
             {
               "alias": "Open FDs",
@@ -546,7 +552,7 @@
           "x-axis": true,
           "y-axis": true,
           "y_formats": [
-            "none",
+            "short",
             "none"
           ]
         }
@@ -592,6 +598,6 @@
   },
   "refresh": "10s",
   "schemaVersion": 8,
-  "version": 1,
+  "version": 4,
   "links": []
 }
