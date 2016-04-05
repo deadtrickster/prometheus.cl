@@ -2,7 +2,7 @@
 
 Example Grafana dashboard for Hunchentoot on SBCL:
 
-![Prometheus + Grafan + SBCL + Hunchentoot](http://i.imgur.com/bEs5Ub7.png)
+![Prometheus + Grafan + SBCL + Hunchentoot](http://i.imgur.com/8CBhHPU.png)
 
 ## Metric Types
 
