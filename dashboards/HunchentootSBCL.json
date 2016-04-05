@@ -1,0 +1,597 @@
+{
+  "id": 1,
+  "title": "Hunchentoot + SBCL",
+  "originalTitle": "Hunchentoot + SBCL",
+  "tags": [],
+  "style": "dark",
+  "timezone": "browser",
+  "editable": true,
+  "hideControls": false,
+  "sharedCrosshair": false,
+  "rows": [
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": null,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": null,
+            "threshold1": null,
+            "threshold1Color": "rgba(225, 13, 66, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 2,
+          "isNew": true,
+          "leftYAxisLabel": "",
+          "legend": {
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "show": true,
+            "total": true,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "rightYAxisLabel": "",
+          "seriesOverrides": [],
+          "span": 12,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "irate(http_requests_count[1m])",
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "Test Site",
+              "metric": "http_requests_count",
+              "refId": "A",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Requests/Sec",
+          "tooltip": {
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "none",
+            "short"
+          ]
+        }
+      ],
+      "title": "Row"
+    },
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": null,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": null,
+            "threshold1": 55,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)",
+            "thresholdLine": false
+          },
+          "id": 6,
+          "isNew": true,
+          "leftYAxisLabel": "",
+          "legend": {
+            "alignAsTable": false,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 12,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, rate(http_requests_duration_bucket[15m]))",
+              "intervalFactor": 2,
+              "legendFormat": "Test Site",
+              "metric": "http_requests_duration_sum",
+              "refId": "A",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Requests Duration 95%",
+          "tooltip": {
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "none",
+            "short"
+          ]
+        }
+      ],
+      "title": "New row"
+    },
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [
+        {
+          "aliasColors": {
+            "Total Dynamic Bytes (Mb)": "#7EB26D"
+          },
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": null,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": null,
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 3,
+          "isNew": true,
+          "leftYAxisLabel": "",
+          "legend": {
+            "alignAsTable": false,
+            "avg": true,
+            "current": false,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "rightYAxisLabel": "",
+          "seriesOverrides": [
+            {
+              "alias": "{}",
+              "yaxis": 2
+            },
+            {
+              "alias": "Total Dynamic Objects (Millions)",
+              "yaxis": 2
+            }
+          ],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(sbcl_dynamic_bytes)/1048576",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "Total Dynamic Bytes (Mb)",
+              "metric": "sbcl_dynamic_bytes",
+              "refId": "F",
+              "step": 2
+            },
+            {
+              "expr": "sum(sbcl_dynamic_objects)/1000000",
+              "intervalFactor": 2,
+              "legendFormat": "Total Dynamic Objects (Millions)",
+              "refId": "A",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Dynamic Memory",
+          "tooltip": {
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "mbytes",
+            "none"
+          ]
+        },
+        {
+          "aliasColors": {
+            "Threads count": "#7EB26D"
+          },
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": 1,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": null,
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "id": 5,
+          "isNew": true,
+          "legend": {
+            "avg": true,
+            "current": false,
+            "max": true,
+            "min": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [
+            {
+              "alias": "CPU load",
+              "yaxis": 2
+            }
+          ],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sbcl_threads_count",
+              "intervalFactor": 2,
+              "legendFormat": "SBCL threads",
+              "metric": "sbcl_threads_count",
+              "refId": "A",
+              "step": 2
+            },
+            {
+              "expr": "process_threads_count",
+              "intervalFactor": 2,
+              "legendFormat": "Native threads",
+              "metric": "process_threads_count",
+              "refId": "C",
+              "step": 2
+            },
+            {
+              "expr": "rate(process_cpu_seconds_total{job=\"lisp\"}[1m]) * 100",
+              "intervalFactor": 2,
+              "legendFormat": "CPU load",
+              "refId": "B",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Threads & CPU",
+          "tooltip": {
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "short",
+            "short"
+          ]
+        }
+      ],
+      "title": "New row"
+    },
+    {
+      "collapse": false,
+      "editable": true,
+      "height": "250px",
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": null,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": null,
+            "threshold1": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "height": "",
+          "id": 7,
+          "isNew": true,
+          "leftYAxisLabel": "Megabytes",
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "span": 6,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"instance\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Instance",
+              "metric": "sbcl_dynamic_bytes",
+              "refId": "A",
+              "step": 2
+            },
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"cons\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Cons",
+              "refId": "B",
+              "step": 2
+            },
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"simple-vector\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Simple Vector",
+              "refId": "C",
+              "step": 2
+            },
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"simple-character-string\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Simple Character String",
+              "refId": "D",
+              "step": 2
+            },
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"code\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Code",
+              "refId": "E",
+              "step": 2
+            },
+            {
+              "expr": "sbcl_dynamic_bytes{object_type=\"other\"}/1048576",
+              "intervalFactor": 2,
+              "legendFormat": "Other",
+              "refId": "F",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Dynamic Memory Breakdown",
+          "tooltip": {
+            "shared": true,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "mbytes",
+            "short"
+          ]
+        },
+        {
+          "aliasColors": {
+            "Max FDs": "#E24D42"
+          },
+          "bars": false,
+          "datasource": "prom",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {
+            "leftLogBase": 1,
+            "leftMax": null,
+            "leftMin": 0,
+            "rightLogBase": 1,
+            "rightMax": null,
+            "rightMin": 0,
+            "threshold1": null,
+            "threshold1Color": "rgba(12, 181, 26, 0.27)",
+            "threshold2": null,
+            "threshold2Color": "rgba(234, 112, 112, 0.22)",
+            "thresholdLine": false
+          },
+          "id": 8,
+          "isNew": true,
+          "leftYAxisLabel": "FDs",
+          "legend": {
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 2,
+          "links": [],
+          "nullPointMode": "connected",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "rightYAxisLabel": "FDs",
+          "seriesOverrides": [
+            {
+              "alias": "Open FDs",
+              "yaxis": 1
+            },
+            {
+              "alias": "Max FDs",
+              "yaxis": 1
+            }
+          ],
+          "span": 6,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "process_open_fds{job=\"lisp\"}",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "Open FDs",
+              "refId": "B",
+              "step": 2
+            },
+            {
+              "expr": "process_max_fds{job=\"lisp\"}",
+              "intervalFactor": 2,
+              "legendFormat": "Max FDs",
+              "metric": "process_max_fds",
+              "refId": "A",
+              "step": 2
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "File Descriptors",
+          "tooltip": {
+            "shared": true,
+            "value_type": "cumulative"
+          },
+          "type": "graph",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "none",
+            "none"
+          ]
+        }
+      ],
+      "title": "New row"
+    }
+  ],
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {
+    "now": true,
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "refresh": "10s",
+  "schemaVersion": 8,
+  "version": 1,
+  "links": []
+}
