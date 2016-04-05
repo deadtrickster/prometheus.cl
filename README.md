@@ -4,6 +4,8 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 
 ![Prometheus + Grafan + SBCL + Hunchentoot](http://i.imgur.com/8CBhHPU.png)
 
+You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
+
 ## Metric Types
 
 - Counter
