@@ -10,7 +10,7 @@
 (defun read-stat ()
   (with-open-file (stream "/proc/self/stat")
     (split-sequence #\Space
-                    (elt (split-sequence #\) (read-line stream)) 1)
+                    (read-line stream)
                     :remove-empty-subseqs t)))
 
 (defun get-btime ()
@@ -29,7 +29,7 @@
 
 (defun get-start-time ()
   (let ((stat (read-stat)))
-    (+ (round (/ (parse-integer (elt stat 19)) (get-ticks))) (get-btime))))
+    (+ (round (/ (parse-integer (elt stat 21)) (get-ticks))) (get-btime))))
 
 (defun make-process-collector (&key (namespace "") (name "process_collector") (registry prom:*default-registry*))
   (let ((collector (make-instance 'process-collector :namespace namespace
@@ -88,17 +88,22 @@
   (ignore-errors
    (let ((stat (read-stat)))
 
+     (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_threads_count")
+                                  :help "Process Threads count."
+                                  :value (elt stat 19)
+                                  :registry nil))
+
      (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_virtual_memory_bytes")
                                   :help "Virtual memory size in bytes."
-                                  :value (elt stat 20)
+                                  :value (elt stat 22)
                                   :registry nil))
      (funcall cb (prom:make-gauge :name (prom:collector-metric-name pc "process_resident_memory_bytes")
                                   :help "Resident memory size in bytes."
-                                  :value (* (page-size pc) (parse-integer (elt stat 21)))
+                                  :value (* (page-size pc) (parse-integer (elt stat 23)))
                                   :registry nil))
 
-     (let ((utime (/ (parse-integer (elt stat 11)) (ticks pc)))
-           (stime (/ (parse-integer (elt stat 12)) (ticks pc)))
+     (let ((utime (/ (parse-integer (elt stat 13)) (ticks pc)))
+           (stime (/ (parse-integer (elt stat 14)) (ticks pc)))
            (c (prom:make-counter :name (prom:collector-metric-name pc "process_cpu_seconds")
                                  :help "Process CPU seconds."
                                  :labels '("time")
