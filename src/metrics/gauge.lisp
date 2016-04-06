@@ -34,7 +34,7 @@
   (:method ((gauge gauge) &key labels)
     (synchronize gauge
       (let ((metric (get-metric gauge labels)))
-        (reset metric))))
+        (gauge.reset metric))))
   (:method ((gauge gauge-metric) &key labels)
     (declare (ignore labels))
     (synchronize gauge
