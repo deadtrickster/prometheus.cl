@@ -19,12 +19,24 @@
    (labels :initform nil :initarg :labels :reader metric-family-labels)
    (metrics :initform (make-instance 'ht-metrics-storage) :initarg :metrics :reader metric-family-metrics)))
 
-(defmethod initialize-instance :before ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
-  (declare (ignore initargs))
-  (check-metric-name name)
-  (check-label-names labels)
-  (when (next-method-p)
-    (call-next-method)))
+(define-method-combination validator ()
+         ((primary () :order :most-specific-last :required t))
+   (let ((form (if (rest primary)
+                   `(progn ,@(mapcar #'(lambda (method)
+                                         `(call-method ,method))
+                                     primary))
+                   `(call-method ,(first primary)))))
+     form))
+
+(defgeneric validate-args (mv &rest initargs &key &allow-other-keys)
+  (:method-combination validator)
+  (:method ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
+    (declare (ignore initargs))
+    (check-metric-name name)
+    (check-label-names labels)))
+
+(defmethod initialize-instance :before ((mf metric-family) &rest initargs)
+  (apply #'validate-args mf initargs))
 
 (defgeneric mf-make-metric (metric-family labels))
 
