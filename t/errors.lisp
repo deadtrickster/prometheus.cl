@@ -36,6 +36,13 @@
     (error-report-test prom:invalid-label-name-error ((:name 123 :reason "label name is not a string")
                                                       "Label name 123 is invalid. Reason: label name is not a string")))
 
+
+  (subtest "Invalid Label Value Error"
+    (error-class-exists prom:invalid-label-value-error)
+
+    (error-report-test prom:invalid-label-value-error ((:value 123 :reason "label value is not a string")
+                                                       "Label value 123 is invalid. Reason: label value is not a string")))
+
   (subtest "Invalid Metric Name Error"
     (error-class-exists prom:invalid-metric-name-error)
 
