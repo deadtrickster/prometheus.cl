@@ -2,10 +2,6 @@
 
 (plan 1)
 
-(defmacro with-fresh-registry (&body body)
-  `(let ((prom:*default-registry* (make-instance 'prom:registry)))
-     ,@body))
-
 (subtest "Basic test"
   (with-fresh-registry
     (let ((rc (prom:make-counter :name "requests_counter" :help "Hunchentoot requires counter" :labels '("type")))

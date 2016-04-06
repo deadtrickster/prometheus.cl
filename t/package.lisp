@@ -13,3 +13,7 @@
              form
              error
              report)))
+
+(defmacro with-fresh-registry (&body body)
+  `(let ((prom:*default-registry* (make-instance 'prom:registry)))
+     ,@body))
