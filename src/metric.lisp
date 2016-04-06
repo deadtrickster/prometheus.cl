@@ -1,11 +1,22 @@
 (in-package #:prometheus)
 
+(defun check-metric-name-regex (name)
+  (unless (equal name (ppcre:scan-to-strings "[a-zA-Z_:][a-zA-Z0-9_:]*" name))
+    (error "Metric name ~a doesn't match regex [a-zA-Z_:][a-zA-Z0-9_:]*" name)))
+
 (defclass metric-family (collectable synchronizable)
   ((name :initarg :name :reader metric-family-name)
    (help :initform nil :initarg :help :reader metric-family-help)
    (type :initform "untyped" :initarg :type :reader metric-family-type)
    (labels :initform nil :initarg :labels :reader metric-family-labels)
    (metrics :initform (make-instance 'ht-metrics-storage) :initarg :metrics :reader metric-family-metrics)))
+
+(defmethod initialize-instance :before ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
+  (declare (ignore initargs))
+  (check-metric-name-regex name)
+  (check-labels-names labels)
+  (when (next-method-p)
+    (call-next-method)))
 
 (defgeneric mf-make-metric (metric-family labels))
 

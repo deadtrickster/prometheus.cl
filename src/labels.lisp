@@ -18,7 +18,7 @@
   (unless (equal label (ppcre:scan-to-strings "[a-zA-Z_][a-zA-Z0-9_]*" label))
     (error "Label ~a doesn't match regex [a-zA-Z_][a-zA-Z0-9_]*" label)))
 
-(defun validate-label-names (labels)
+(defun check-labels-names (labels)
   (dolist (label labels)
     (check-label-name-is-string label)
     (check-label-name-not-reserved label)
