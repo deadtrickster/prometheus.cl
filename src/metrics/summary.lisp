@@ -32,6 +32,11 @@
   (check-summary-value value)
   (summary.observe% summary value count labels))
 
+(defmacro summary.time (summary &body body)
+  `(timing% (lambda (time)
+              (summary.observe ,summary time))
+            (lambda () ,@body)))
+
 (defun make-summary (&key name help labels value (count 1) (registry *default-registry*))
   (check-value-or-labels value labels)
   (let ((summary (make-instance 'summary :name name
@@ -42,8 +47,3 @@
     (when registry
       (register summary registry))
     summary))
-
-(defmacro summary.time (summary &body body)
-  `(timing% (lambda (time)
-              (summary.observe ,summary time))
-            (lambda () ,@body)))
