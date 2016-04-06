@@ -22,7 +22,7 @@
 (defmethod initialize-instance :before ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
   (declare (ignore initargs))
   (check-metric-name name)
-  (check-labels-names labels)
+  (check-label-names labels)
   (when (next-method-p)
     (call-next-method)))
 
@@ -32,7 +32,7 @@
   (funcall cb mf))
 
 (defmethod get-metric ((mf metric-family) labels)
-  (assert (listp labels) nil "Labels values must be list. Go ~a ~a" (type-of labels) labels)
+  (assert (listp labels) nil "Labels values must be list. Got ~a ~a" (type-of labels) labels)
   (assert (= (length (metric-family-labels mf)) (length labels))
           nil "Invalid label count ~a" (length labels))
   (check-label-values labels)

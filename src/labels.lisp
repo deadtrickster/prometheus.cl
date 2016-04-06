@@ -25,7 +25,7 @@
   (check-label-name-does-not-start-with__ label)
   (check-label-name-regex label))
 
-(defun check-labels-names (labels)
+(defun check-label-names (labels)
   (dolist (label labels)
     (check-label-name label))
   labels)
