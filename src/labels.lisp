@@ -30,5 +30,7 @@
     (check-label-name label))
   labels)
 
-(defun validate-label-values (values)
-  (every #'stringp values))
+(defun check-label-values (values)
+  (dolist (value values)
+    (unless (stringp value)
+      (error 'invalid-label-value-error :value value :reason "label value is not a string"))))
