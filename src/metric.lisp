@@ -32,10 +32,7 @@
   (funcall cb mf))
 
 (defmethod get-metric ((mf metric-family) labels)
-  (assert (listp labels) nil "Labels values must be list. Got ~a ~a" (type-of labels) labels)
-  (assert (= (length (metric-family-labels mf)) (length labels))
-          nil "Invalid label count ~a" (length labels))
-  (check-label-values labels)
+  (check-label-values labels (metric-family-labels mf))
   (or (get-metric (metric-family-metrics mf) labels)
       (add-metric (metric-family-metrics mf) (mf-make-metric mf labels))))
 

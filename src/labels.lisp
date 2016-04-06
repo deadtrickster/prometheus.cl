@@ -30,7 +30,9 @@
     (check-label-name label))
   labels)
 
-(defun check-label-values (values)
+(defun check-label-values (values names)
+  (unless (= (length names) (length values))
+    (error 'invalid-label-count-error :actual (length values) :expected (length names)))
   (dolist (value values)
     (unless (stringp value)
       (error 'invalid-label-value-error :value value :reason "label value is not a string"))))

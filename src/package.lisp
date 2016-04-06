@@ -47,4 +47,5 @@
            #:base-error
            #:invalid-label-name-error
            #:invalid-label-value-error
+           #:invalid-label-count-error
            #:invalid-metric-name-error))

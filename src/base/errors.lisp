@@ -15,6 +15,12 @@
   (:report (lambda (error stream)
              (format stream "Label value ~s is invalid. Reason: ~a" (slot-value error 'value) (slot-value error 'reason)))))
 
+(define-condition invalid-label-count-error (base-error)
+  ((actual :initarg :actual)
+   (expected :initarg :expected))
+  (:report (lambda (error stream)
+             (format stream "Invalid label count. Got ~a, expected ~a" (slot-value error 'actual) (slot-value error 'expected)))))
+
 (define-condition invalid-metric-name-error (base-error)
   ((name :initarg :name)
    (reason :initarg :reason))
