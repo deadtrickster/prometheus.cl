@@ -1,8 +1,16 @@
 (in-package #:prometheus)
 
+(defun check-metric-name-is-string (name)
+  (unless (stringp name)
+    (error 'invalid-metric-name-error :name name :reason "metric name is not a string")))
+
 (defun check-metric-name-regex (name)
   (unless (equal name (ppcre:scan-to-strings "[a-zA-Z_:][a-zA-Z0-9_:]*" name))
-    (error "Metric name ~a doesn't match regex [a-zA-Z_:][a-zA-Z0-9_:]*" name)))
+    (error 'invalid-metric-name-error :name name :reason "metric name doesn't match regex [a-zA-Z_:][a-zA-Z0-9_:]*")))
+
+(defun check-metric-name (name)
+  (check-metric-name-is-string name)
+  (check-metric-name-regex name))
 
 (defclass metric-family (collectable synchronizable)
   ((name :initarg :name :reader metric-family-name)
@@ -13,7 +21,7 @@
 
 (defmethod initialize-instance :before ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
   (declare (ignore initargs))
-  (check-metric-name-regex name)
+  (check-metric-name name)
   (check-labels-names labels)
   (when (next-method-p)
     (call-next-method)))
