@@ -16,6 +16,11 @@
   ((buckets :initarg :buckets :reader histogram-buckets))
   (:default-initargs :type "histogram"))
 
+(defmethod validate-args ((mf histogram) &rest initargs &key labels &allow-other-keys)
+  (declare (ignore initargs))
+  (when (find "le" labels :test #'equal)
+    (error 'invalid-label-name-error :name "le" :reason "histogram cannot have a label named \"le\"")))
+
 (defclass histogram-metric (metric)
   ((sum :initform 0 :reader histogram-sum)))
 
