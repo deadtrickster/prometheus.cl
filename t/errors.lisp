@@ -49,6 +49,11 @@
     (error-report-test prom:invalid-label-count-error ((:actual 123 :expected 12)
                                                        "Invalid label count. Got 123, expected 12")))
 
+  (subtest "Invalid Labels Error"
+    (error-class-exists prom:invalid-labels-error)
+    (error-report-test prom:invalid-labels-error ((:actual #(1 2 3) :expected 'list)
+                                                  "Invalid labels. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), expected LIST")))
+
   (subtest "Invalid Metric Name Error"
     (error-class-exists prom:invalid-metric-name-error)
 
