@@ -6,6 +6,8 @@
   (:export *default-registry*
            #:registry
            #:register
+           #:unregister
+           #:registeredp
            #:collect
            #:collector
            #:collector-metric-name

@@ -20,6 +20,13 @@
   (:method ((registry registry) collectable)
     (remhash (collectable-name collectable) (registry-hash-table registry))))
 
+(defgeneric registered-p% (register collectable-designator)
+  (:method ((registry registry) (collectable collectable))
+    (when (eq collectable (registered-p% registry (collectable-name collectable)))
+      collectable))
+  (:method ((registry registry) (collectable-name string))
+    (gethash collectable-name (registry-hash-table registry))))
+
 (defmethod collect ((registry registry) cb)
   (with-hash-table-iterator (next (registry-hash-table registry))
     (loop
@@ -34,3 +41,6 @@
 
 (defun unregister (collectable &optional (registry *default-registry*))
   (unregister% registry collectable))
+
+(defun registeredp (collectable &optional (register *default-registry*))
+  (registered-p% register collectable))
