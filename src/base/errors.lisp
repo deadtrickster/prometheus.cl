@@ -19,7 +19,13 @@
   ((actual :initarg :actual)
    (expected :initarg :expected))
   (:report (lambda (error stream)
-             (format stream "Invalid label count. Got ~a, expected ~a" (slot-value error 'actual) (slot-value error 'expected)))))
+             (format stream "Invalid label count. Got ~s, expected ~a" (slot-value error 'actual) (slot-value error 'expected)))))
+
+(define-condition invalid-labels-error (base-error)
+  ((actual :initarg :actual)
+   (expected :initarg :expected))
+  (:report (lambda (error stream)
+             (format stream "Invalid labels. Got ~s (type: ~a), expected ~a" (slot-value error 'actual) (type-of (slot-value error 'actual)) (slot-value error 'expected)))))
 
 (define-condition invalid-metric-name-error (base-error)
   ((name :initarg :name)

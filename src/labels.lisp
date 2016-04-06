@@ -26,11 +26,15 @@
   (check-label-name-regex label))
 
 (defun check-label-names (labels)
+  (unless (listp labels)
+    (error 'invalid-labels-error :actual labels :expected 'list))
   (dolist (label labels)
     (check-label-name label))
   labels)
 
 (defun check-label-values (values names)
+  (unless (listp values)
+    (error 'invalid-labels-error :actual values :expected 'list))
   (unless (= (length names) (length values))
     (error 'invalid-label-count-error :actual (length values) :expected (length names)))
   (dolist (value values)
