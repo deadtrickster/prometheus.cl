@@ -42,4 +42,8 @@
            #:summary-sum
            #:make-summary
            #:summary.observe
-           #:summary.time))
+           #:summary.time
+           ;; errors
+           #:base-error
+           #:invalid-label-name-error
+           #:invalid-metric-name-error))

@@ -14,7 +14,8 @@
                  (:module "base"
                   :serial t
                   :components
-                  ((:file "synchronizable")
+                  ((:file "errors")
+                   (:file "synchronizable")
                    (:file "collectable")
                    (:file "metrics-storage")
                    (:file "timing")))
