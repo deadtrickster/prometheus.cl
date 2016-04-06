@@ -58,6 +58,12 @@
     (error-class-exists prom:invalid-metric-name-error)
 
     (error-report-test prom:invalid-metric-name-error ((:name 123 :reason "metric name is not a string")
-                                                       "Metric name 123 is invalid. Reason: metric name is not a string"))))
+                                                       "Metric name 123 is invalid. Reason: metric name is not a string")))
+
+  (subtest "Invalid Value Error"
+    (error-class-exists prom:invalid-value-error)
+
+    (error-report-test prom:invalid-value-error ((:value -1 :reason "counters can only be incremented by non-negative amounts")
+                                                 "Value -1 is invalid. Reason: counters can only be incremented by non-negative amounts"))))
 
 (finalize)
