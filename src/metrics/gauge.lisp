@@ -12,6 +12,10 @@
 (defclass gauge-metric (simple-metric)
   ((value :initform +gauge-default+)))
 
+(defun check-gauge-value (value)
+  (unless (numberp value)
+    (error 'invalid-value-error :value value :reason "value is not a number")))
+
 (defgeneric gauge.set% (gauge value labels)
   (:method ((gauge gauge) value labels)
     (synchronize gauge
@@ -23,6 +27,7 @@
       (setf (slot-value gauge 'value) value))))
 
 (defun gauge.set (gauge value &key labels)
+  (check-gauge-value value)
   (gauge.set% gauge value labels))
 
 (defgeneric gauge.reset (gauge &key labels)
@@ -36,10 +41,10 @@
       (setf (slot-value gauge 'value) +gauge-default+))))
 
 (defun make-gauge (&key name help labels value (registry *default-registry*))
-  (assert (not (and labels value)) nil "Can only specify at most one of value and labels.")
+  (check-value-or-labels value labels)
   (let ((gauge (make-instance 'gauge :name name
-                                      :help help
-                                      :labels labels)))
+                                     :help help
+                                     :labels labels)))
     (when value
       (gauge.set gauge value))
     (when registry

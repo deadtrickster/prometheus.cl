@@ -50,7 +50,7 @@
     with+inf))
 
 (defun make-histogram (&key name help labels buckets value (registry *default-registry*))
-  (assert (not (and labels value)) nil "Can only specify at most one of value and labels.")
+  (check-value-or-labels value labels)
   (let ((histogram (make-instance 'histogram :name name
                                              :help help
                                              :labels labels

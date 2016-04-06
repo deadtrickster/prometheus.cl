@@ -45,3 +45,6 @@
 
 (defclass simple-metric (metric)
   ())
+
+(defun check-value-or-labels (value labels)
+  (assert (not (and labels value)) nil 'invalid-value-error :value value :reason "can only specify at most one of value and labels"))

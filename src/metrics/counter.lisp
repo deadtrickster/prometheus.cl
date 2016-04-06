@@ -43,7 +43,7 @@
       (setf (slot-value counter 'value) +counter-default+))))
 
 (defun make-counter (&key name help labels value (registry *default-registry*))
-  (assert (not (and labels value)) nil 'invalid-value-error :value value :reason "can only specify at most one of value and labels")
+  (check-value-or-labels value labels)
   (let ((counter (make-instance 'counter :name name
                                          :help help
                                          :labels labels)))

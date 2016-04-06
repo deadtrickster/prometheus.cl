@@ -25,7 +25,7 @@
       (incf (slot-value summary 'sum) value))))
 
 (defun make-summary (&key name help labels value (registry *default-registry*))
-  (assert (not (and labels value)) nil "Can only specify at most one of value and labels.")
+  (check-value-or-labels value labels)
   (let ((summary (make-instance 'summary :name name
                                          :help help
                                          :labels labels)))
