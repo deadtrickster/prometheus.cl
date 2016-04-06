@@ -41,6 +41,7 @@
            #:histogram.time
            #:summary
            #:summary-metric
+           #:summary-count
            #:summary-sum
            #:make-summary
            #:summary.observe

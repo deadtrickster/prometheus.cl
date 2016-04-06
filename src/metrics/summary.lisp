@@ -10,8 +10,12 @@
   (make-instance 'summary-metric :labels labels))
 
 (defclass summary-metric (metric)
-  ((value :initform +summary-default+)
+  ((value :initform +summary-default+ :reader summary-count)
    (sum :initform +summary-default+ :reader summary-sum)))
+
+(defun check-summary-value (value)
+  (unless (numberp value)
+    (error 'invalid-value-error :value value :reason "value is not a number")))
 
 (defgeneric summary.observe% (summary value count labels)
   (:method ((summary summary) value count labels)
@@ -25,6 +29,7 @@
       (incf (slot-value summary 'sum) value))))
 
 (defun summary.observe (summary value &key (count 1) labels)
+  (check-summary-value value)
   (summary.observe% summary value count labels))
 
 (defun make-summary (&key name help labels value (count 1) (registry *default-registry*))
