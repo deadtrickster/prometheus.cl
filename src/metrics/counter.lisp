@@ -46,9 +46,8 @@
   (check-value-or-labels value labels)
   (let ((counter (make-instance 'counter :name name
                                          :help help
-                                         :labels labels)))
+                                         :labels labels
+                                         :registry registry)))
     (when value
       (counter.inc counter :value value))
-    (when registry
-      (register counter registry))
     counter))

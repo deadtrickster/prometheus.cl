@@ -59,12 +59,11 @@
   (let ((histogram (make-instance 'histogram :name name
                                              :help help
                                              :labels labels
-                                             :buckets (validate-buckets buckets))))
+                                             :buckets (validate-buckets buckets)
+                                             :registry registry)))
     (when value
       (dolist (v value)
         (histogram.observe histogram v)))
-    (when registry
-      (register histogram registry))
     histogram))
 
 (defmacro histogram.time (histogram &body body)

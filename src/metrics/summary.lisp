@@ -41,9 +41,8 @@
   (check-value-or-labels value labels)
   (let ((summary (make-instance 'summary :name name
                                          :help help
-                                         :labels labels)))
+                                         :labels labels
+                                         :registry registry)))
     (when value
       (summary.observe summary value :count count))
-    (when registry
-      (register summary registry))
     summary))

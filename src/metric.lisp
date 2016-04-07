@@ -38,6 +38,11 @@
 (defmethod initialize-instance :before ((mf metric-family) &rest initargs)
   (apply #'validate-args mf initargs))
 
+(defmethod initialize-instance :after ((mf metric-family) &rest initargs &key registry &allow-other-keys)
+  (declare (ignore initargs))
+  (when registry
+    (register mf registry)))
+
 (defgeneric mf-make-metric (metric-family labels))
 
 (defmethod collect ((mf metric-family) cb)

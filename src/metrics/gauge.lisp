@@ -44,9 +44,8 @@
   (check-value-or-labels value labels)
   (let ((gauge (make-instance 'gauge :name name
                                      :help help
-                                     :labels labels)))
+                                     :labels labels
+                                     :registry registry)))
     (when value
       (gauge.set gauge value))
-    (when registry
-      (register gauge registry))
     gauge))
