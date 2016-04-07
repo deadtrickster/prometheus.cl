@@ -1,6 +1,6 @@
 (asdf:defsystem :prometheus.collectors.sbcl
   :serial t
-  :version "0.0.1"
+  :version "0.1"
   :licence "MIT"
   :depends-on ("prometheus")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"

@@ -3,7 +3,7 @@
 
 (asdf:defsystem :prometheus.collectors.process
   :serial t
-  :version "0.0.1"
+  :version "0.1"
   :licence "MIT"
   :depends-on ("prometheus"
                "cl-fad"

@@ -1,6 +1,6 @@
 (asdf:defsystem :prometheus.formats.text
   :serial t
-  :version "0.0.1"
+  :version "0.1"
   :licence "MIT"
   :depends-on ("prometheus"
                "alexandria")
