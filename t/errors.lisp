@@ -30,6 +30,13 @@
   (subtest "Base Error"
     (error-class-exists prom:base-error error))
 
+  (subtest "Invalid Value Error"
+    (error-class-exists prom:invalid-value-error)
+
+    (error-report-test prom:invalid-value-error ((:value -1 :reason "counters can only be incremented by non-negative amounts")
+                                                 "Value -1 is invalid. Reason: counters can only be incremented by non-negative amounts")))
+
+
   (subtest "Invalid Label Name Error"
     (error-class-exists prom:invalid-label-name-error)
 
@@ -38,7 +45,7 @@
 
 
   (subtest "Invalid Label Value Error"
-    (error-class-exists prom:invalid-label-value-error)
+    (error-class-exists prom:invalid-label-value-error prom:invalid-value-error)
 
     (error-report-test prom:invalid-label-value-error ((:value 123 :reason "label value is not a string")
                                                        "Label value 123 is invalid. Reason: label value is not a string")))
@@ -60,15 +67,16 @@
     (error-report-test prom:invalid-metric-name-error ((:name 123 :reason "metric name is not a string")
                                                        "Metric name 123 is invalid. Reason: metric name is not a string")))
 
-  (subtest "Invalid Value Error"
-    (error-class-exists prom:invalid-value-error)
-
-    (error-report-test prom:invalid-value-error ((:value -1 :reason "counters can only be incremented by non-negative amounts")
-                                                 "Value -1 is invalid. Reason: counters can only be incremented by non-negative amounts")))
-
   (subtest "Invalid Buckets Error"
     (error-class-exists prom:invalid-buckets-error)
     (error-report-test prom:invalid-buckets-error ((:actual #(1 2 3) :expected 'list)
-                                                  "Invalid buckets. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), expected LIST"))))
+                                                   "Invalid buckets. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), expected LIST")))
+
+
+  (subtest "Invalid Bucket Bound Error"
+    (error-class-exists prom:invalid-bucket-bound-error prom:invalid-value-error)
+
+    (error-report-test prom:invalid-bucket-bound-error ((:value "QWE" :reason "bucket bound is not an integer/float")
+                                                       "Bucket bound \"QWE\" is invalid. Reason: bucket bound is not an integer/float"))))
 
 (finalize)
