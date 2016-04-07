@@ -16,13 +16,38 @@
   ((buckets :initarg :buckets :reader histogram-buckets))
   (:default-initargs :type "histogram"))
 
-(defmethod validate-args ((mf histogram) &rest initargs &key labels &allow-other-keys)
+(defun validate-and-normalize-buckets (buckets)
+  (unless (listp buckets)
+    (error 'invalid-buckets-error :actual buckets :expected 'list))
+
+  (unless (> (length buckets) 0)
+    (error 'invalid-value-error :value buckets :reason "must be at least one bucket"))
+
+  (dolist (bound buckets)
+    (unless (or (integerp bound)
+                (floatp bound))
+      (error 'invalid-bucket-bound-error :value bound :reason "bucket bound is not an integer/float")))
+
+  (unless (equalp (sort (copy-seq buckets) #'<) buckets)
+    (error 'invalid-value-error :value buckets :reason "buckets not sorted"))
+
+  (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+    (replace with+inf buckets)
+    with+inf))
+
+(defmethod validate-args ((mf histogram) &rest initargs &key labels buckets &allow-other-keys)
   (declare (ignore initargs))
   (when (find "le" labels :test #'equal)
-    (error 'invalid-label-name-error :name "le" :reason "histogram cannot have a label named \"le\"")))
+    (error 'invalid-label-name-error :name "le" :reason "histogram cannot have a label named \"le\""))
+  (list :buckets (validate-and-normalize-buckets buckets)))
 
 (defclass histogram-metric (metric)
   ((sum :initform 0 :reader histogram-sum)))
+
+(defmethod histogram-count ((metric histogram-metric))
+  (reduce (lambda (val b)
+            (+ val (prom:bucket-count b)))
+          (prom:metric-value metric) :initial-value 0))
 
 (defmethod mf-make-metric ((metric histogram) labels)
   (make-instance 'histogram-metric :labels labels
@@ -48,23 +73,12 @@
               (histogram.observe ,histogram time))
             (lambda () ,@body)))
 
-(defun validate-buckets (buckets)
-  (assert (every (lambda (v)
-                   (or (integerp v)
-                       (floatp v)))
-                 buckets) nil "Buckets bounds must be integers/floats")
-  (assert (> (length buckets) 0) nil "Must be at least one bucket")
-  (assert (equalp (sort (copy-seq buckets) #'<) buckets) nil "Buckets not sorted")
-  (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
-    (replace with+inf buckets)
-    with+inf))
-
 (defun make-histogram (&key name help labels buckets value (registry *default-registry*))
   (check-value-or-labels value labels)
   (let ((histogram (make-instance 'histogram :name name
                                              :help help
                                              :labels labels
-                                             :buckets (validate-buckets buckets)
+                                             :buckets buckets
                                              :registry registry)))
     (when value
       (dolist (v value)

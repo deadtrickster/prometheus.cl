@@ -19,12 +19,19 @@
    (labels :initform nil :initarg :labels :reader metric-family-labels)
    (metrics :initform (make-instance 'ht-metrics-storage) :initarg :metrics :reader metric-family-metrics)))
 
+(defun reverse-plist (plist)
+  "Courtesy of 'igam' from #lisp"
+  (loop for cur on (reverse plist)
+                by #'cddr
+                while cur
+                collect (cadr cur) collect (car cur)))
+
 (define-method-combination validator ()
          ((primary () :order :most-specific-last :required t))
    (let ((form (if (rest primary)
-                   `(progn ,@(mapcar #'(lambda (method)
-                                         `(call-method ,method))
-                                     primary))
+                   `(reverse-plist (append ,@(mapcar #'(lambda (method)
+                                                         `(call-method ,method))
+                                                     primary)))
                    `(call-method ,(first primary)))))
      form))
 
@@ -33,10 +40,11 @@
   (:method ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
     (declare (ignore initargs))
     (check-metric-name name)
-    (check-label-names labels)))
+    (check-label-names labels)
+    nil))
 
-(defmethod initialize-instance :before ((mf metric-family) &rest initargs)
-  (apply #'validate-args mf initargs))
+(defmethod initialize-instance ((mf metric-family) &rest initargs)
+  (apply #'call-next-method mf (append (apply #'validate-args mf initargs) initargs)))
 
 (defmethod initialize-instance :after ((mf metric-family) &rest initargs &key registry &allow-other-keys)
   (declare (ignore initargs))
