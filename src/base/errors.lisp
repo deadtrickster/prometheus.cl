@@ -38,3 +38,9 @@
    (reason :initarg :reason))
   (:report (lambda (error stream)
              (format stream "Value ~s is invalid. Reason: ~a" (slot-value error 'value) (slot-value error 'reason)))))
+
+(define-condition invalid-buckets-error (base-error)
+  ((actual :initarg :actual)
+   (expected :initarg :expected))
+  (:report (lambda (error stream)
+             (format stream "Invalid buckets. Got ~s (type: ~a), expected ~a" (slot-value error 'actual) (type-of (slot-value error 'actual)) (slot-value error 'expected)))))

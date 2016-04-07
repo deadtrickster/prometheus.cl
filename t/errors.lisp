@@ -64,6 +64,11 @@
     (error-class-exists prom:invalid-value-error)
 
     (error-report-test prom:invalid-value-error ((:value -1 :reason "counters can only be incremented by non-negative amounts")
-                                                 "Value -1 is invalid. Reason: counters can only be incremented by non-negative amounts"))))
+                                                 "Value -1 is invalid. Reason: counters can only be incremented by non-negative amounts")))
+
+  (subtest "Invalid Buckets Error"
+    (error-class-exists prom:invalid-buckets-error)
+    (error-report-test prom:invalid-buckets-error ((:actual #(1 2 3) :expected 'list)
+                                                  "Invalid buckets. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), expected LIST"))))
 
 (finalize)
