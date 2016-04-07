@@ -3,7 +3,7 @@
 (defclass threads-collector (prom:collector)
   ())
 
-(defun make-threads-collector (&key (namespace "") (name "sbcl_threads") (registry prom:*default-registry*))
+(defun make-threads-collector (&key (namespace "") (name "sbcl_threads_collector") (registry prom:*default-registry*))
   (let ((collector (make-instance 'threads-collector :namespace namespace :name name)))
     (when registry
       (prom:register collector registry))

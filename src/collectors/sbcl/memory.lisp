@@ -3,7 +3,7 @@
 (defclass memory-collector (prom:collector)
   ((cutoff :initarg :cutoff :reader memory-collector-cutoff)))
 
-(defun make-memory-collector (&key (namespace "") (cutoff 0.05f0) (name "sbcl_memory") (registry prom:*default-registry*))
+(defun make-memory-collector (&key (namespace "") (cutoff 0.05f0) (name "sbcl_memory_collector") (registry prom:*default-registry*))
   (let ((collector (make-instance 'memory-collector :namespace namespace
                                                     :name name
                                                     :cutoff cutoff)))
