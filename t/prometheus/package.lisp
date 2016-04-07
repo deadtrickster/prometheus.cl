@@ -3,6 +3,8 @@
 (defpackage #:prometheus.test
   (:use :cl :prove))
 
+(in-package #:prometheus.test)
+
 (defmacro is-error-report (form error report)
   `(is
     (handler-case

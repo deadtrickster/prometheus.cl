@@ -7,7 +7,7 @@
                "cl-ppcre"
                "local-time")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
-  :components ((:module "src"
+  :components ((:module "src/prometheus"
                 :serial t
                 :components
                 ((:file "package")
@@ -29,9 +29,5 @@
                   ((:file "counter")
                    (:file "gauge")
                    (:file "histogram")
-                   (:file "summary")))
-                 (:module "formats"
-                  :serial t
-                  :components
-                  ((:file "text"))))))
+                   (:file "summary"))))))
   :description "Prometheus.io Client")

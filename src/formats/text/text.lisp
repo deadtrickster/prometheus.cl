@@ -1,12 +1,4 @@
-(in-package #:cl-user)
-
-(defpackage #:prometheus.text
-  (:use #:cl #:alexandria)
-  (:nicknames #:prom.text)
-  (:export #:+content-type+
-           #:marshal))
-
-(in-package #:prometheus.text)
+(in-package #:prometheus.formats.text)
 
 (define-constant +content-type+ "text/plain; version=0.0.4" :test #'equal)
 

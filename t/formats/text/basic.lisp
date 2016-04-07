@@ -1,4 +1,4 @@
-(in-package #:prometheus.test)
+(in-package #:prometheus.formats.text.test)
 
 (plan 1)
 
@@ -16,7 +16,7 @@
       (prom:histogram.observe h 0.5 :labels '("html"))
       (prom:histogram.observe h 4.5 :labels '("pdf"))
       (prom:summary.observe s 43.3d0)
-      (is (prometheus.text:marshal) "# TYPE requests_counter counter
+      (is (prom.text:marshal) "# TYPE requests_counter counter
 # HELP requests_counter Hunchentoot requires counter
 requests_counter{type=\"post\"} 12
 requests_counter{type=\"get\"} 5
