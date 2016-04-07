@@ -18,10 +18,10 @@
 
 (defun validate-and-normalize-buckets (buckets)
   (unless (listp buckets)
-    (error 'invalid-buckets-error :actual buckets :expected 'list))
+    (error 'invalid-buckets-error :value buckets :reason "expected LIST"))
 
   (unless (> (length buckets) 0)
-    (error 'invalid-value-error :value buckets :reason "must be at least one bucket"))
+    (error 'invalid-buckets-error :value buckets :reason "must be at least one bucket"))
 
   (dolist (bound buckets)
     (unless (or (integerp bound)
@@ -29,7 +29,7 @@
       (error 'invalid-bucket-bound-error :value bound :reason "bucket bound is not an integer/float")))
 
   (unless (equalp (sort (copy-seq buckets) #'<) buckets)
-    (error 'invalid-value-error :value buckets :reason "buckets not sorted"))
+    (error 'invalid-buckets-error :value buckets :reason "bounds not sorted"))
 
   (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
     (replace with+inf buckets)
@@ -42,7 +42,8 @@
   (list :buckets (validate-and-normalize-buckets buckets)))
 
 (defclass histogram-metric (metric)
-  ((sum :initform 0 :reader histogram-sum)))
+  ((value :reader histogram-buckets)
+   (sum :initform 0 :reader histogram-sum)))
 
 (defmethod histogram-count ((metric histogram-metric))
   (reduce (lambda (val b)
@@ -53,12 +54,16 @@
   (make-instance 'histogram-metric :labels labels
                                    :value (bucket-bounds-to-buckets (histogram-buckets metric))))
 
-(defgeneric histogram.observe (histogram value &key labels)
-  (:method ((histogram histogram) value &key labels)
+(defun check-histogram-value (value)
+  (unless (numberp value)
+    (error 'invalid-value-error :value value :reason "value is not a number")))
+
+(defgeneric histogram.observe% (histogram value labels)
+  (:method ((histogram histogram) value labels)
     (synchronize histogram
       (let ((metric (get-metric histogram labels)))
-        (histogram.observe metric value))))
-  (:method ((metric histogram-metric) value &key labels)
+        (histogram.observe% metric value labels))))
+  (:method ((metric histogram-metric) value labels)
     (declare (ignore labels))
     (synchronize metric
       (loop for bucket across (metric-value metric)
@@ -67,6 +72,10 @@
                  (incf (bucket-count bucket))
                  (return)))
       (incf (slot-value metric 'sum) value))))
+
+(defun histogram.observe (histogram value &key labels)
+  (check-histogram-value value)
+  (histogram.observe% histogram value labels))
 
 (defmacro histogram.time (histogram &body body)
   `(timing% (lambda (time)
@@ -81,6 +90,8 @@
                                              :buckets buckets
                                              :registry registry)))
     (when value
-      (dolist (v value)
-        (histogram.observe histogram v)))
+      (if (listp value)
+          (dolist (v value)
+            (histogram.observe histogram v))
+          (histogram.observe histogram value)))
     histogram))
