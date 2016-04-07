@@ -49,13 +49,13 @@ traffic_summary_count 2
       (let ((metrics-acceptor))
         (unwind-protect
              (progn
-               (setf metrics-acceptor (tbnl:start (make-instance 'my-acceptor :address "localhost" :port 9101)))
+               (setf metrics-acceptor (tbnl:start (make-instance 'my-acceptor :registry prom:*default-registry* :address "localhost" :port 9101)))
                (multiple-value-bind (body status-code headers)
                    (drakma:http-request "http://localhost:9101/metrics")
                  (is status-code 200)
                  (is body expected-text "Metrics endpoint sent expected text")
                  (ok (starts-with-subseq prom.text:+content-type+ (drakma:header-value :content-type headers)) "Right content-type")))
           (when metrics-acceptor
-            (tbnl:stop metrics-acceptor)))))))
+            (tbnl:stop metrics-acceptor :soft t)))))))
 
 (finalize)

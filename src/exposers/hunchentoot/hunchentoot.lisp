@@ -2,6 +2,7 @@
 
 (defclass exposer ()
   ((metrics-path :initform #P"metrics" :initarg :metrics-path :reader metrics-path)
+   (registry :initform nil :initarg :registry :reader exposer-registry)
    (mute-access-logs :initform t :initarg :mute-access-logs :reader mute-access-logs)
    (mute-messages-logs :initform t :initarg :mute-error-logs :reader mute-messages-logs)))
 
@@ -19,7 +20,7 @@
   (if (equal (metrics-path acceptor) (tbnl:request-pathname request))
       (progn
         (setf (tbnl:header-out "Content-Type") prom.text:+content-type+)
-        (prom.text:marshal))
+        (prom.text:marshal (or (exposer-registry acceptor) prom:*default-registry*)))
       "<html>
 <head><title>Welcome to Prometheus Exporter!</title></head>
 <body>
