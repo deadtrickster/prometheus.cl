@@ -31,7 +31,7 @@
     (let ((bucket-name (concatenate 'string name "_bucket"))
           (le-labels (append labels (list "le")))
           (counter 0))
-      (loop for bucket across (prom:metric-value metric)
+      (loop for bucket across (prom:histogram-buckets metric)
             do
                (print-sample-line stream bucket-name le-labels (append (prom:metric-labels metric) (list (catch-strange-float (prom:bucket-bound bucket)))) (incf counter (prom:bucket-count bucket))))
       (print-sample-line stream
