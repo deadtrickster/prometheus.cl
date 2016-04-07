@@ -43,6 +43,11 @@
                  (return)))
       (incf (slot-value metric 'sum) value))))
 
+(defmacro histogram.time (histogram &body body)
+  `(timing% (lambda (time)
+              (histogram.observe ,histogram time))
+            (lambda () ,@body)))
+
 (defun validate-buckets (buckets)
   (assert (every (lambda (v)
                    (or (integerp v)
@@ -65,8 +70,3 @@
       (dolist (v value)
         (histogram.observe histogram v)))
     histogram))
-
-(defmacro histogram.time (histogram &body body)
-  `(timing% (lambda (time)
-              (histogram.observe ,histogram time))
-            (lambda () ,@body)))
