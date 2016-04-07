@@ -69,8 +69,8 @@
 
   (subtest "Invalid Buckets Error"
     (error-class-exists prom:invalid-buckets-error)
-    (error-report-test prom:invalid-buckets-error ((:actual #(1 2 3) :expected 'list)
-                                                   "Invalid buckets. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), expected LIST")))
+    (error-report-test prom:invalid-buckets-error ((:value #(1 2 3) :reason "expected LIST")
+                                                   "Invalid buckets. Got #(1 2 3) (type: (SIMPLE-VECTOR 3)), reason: expected LIST")))
 
 
   (subtest "Invalid Bucket Bound Error"

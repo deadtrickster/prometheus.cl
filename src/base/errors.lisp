@@ -38,11 +38,10 @@
   (:report (lambda (error stream)
              (format stream "Metric name ~s is invalid. Reason: ~a" (slot-value error 'name) (slot-value error 'reason)))))
 
-(define-condition invalid-buckets-error (base-error)
-  ((actual :initarg :actual)
-   (expected :initarg :expected))
+(define-condition invalid-buckets-error (invalid-value-error)
+  ()
   (:report (lambda (error stream)
-             (format stream "Invalid buckets. Got ~s (type: ~a), expected ~a" (slot-value error 'actual) (type-of (slot-value error 'actual)) (slot-value error 'expected)))))
+             (format stream "Invalid buckets. Got ~s (type: ~a), reason: ~a" (slot-value error 'value) (type-of (slot-value error 'value)) (slot-value error 'reason)))))
 
 (define-condition invalid-bucket-bound-error (invalid-value-error)
   ()
