@@ -35,6 +35,8 @@
            #:bucket-count
            #:histogram
            #:histogram-metric
+           #:histogram-buckets
+           #:histogram-count
            #:histogram-sum
            #:make-histogram
            #:histogram.observe
