@@ -41,6 +41,8 @@ render_time_count{type=\"html\"} 3
 # HELP traffic_summary traffic summary
 traffic_summary_sum 55.3
 traffic_summary_count 2
-"))))
+")
+
+      (is prom.text:+content-type+ "text/plain; version=0.0.4"))))
 
 (finalize)
