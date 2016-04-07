@@ -19,6 +19,10 @@
    (labels :initform nil :initarg :labels :reader metric-family-labels)
    (metrics :initform (make-instance 'ht-metrics-storage) :initarg :metrics :reader metric-family-metrics)))
 
+(defmethod print-object ((instance metric-family) stream)
+  (print-unreadable-object (instance stream :type t :identity t)
+    (format stream "name: ~a" (metric-family-name instance))))
+
 (defun reverse-plist (plist)
   "Courtesy of 'igam' from #lisp"
   (loop for cur on (reverse plist)
