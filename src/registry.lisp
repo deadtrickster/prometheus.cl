@@ -10,15 +10,18 @@
     (format stream "Prometheus ~:[registry~;default registry~]. Registered ~a collectables" (eq *default-registry* r) (hash-table-count (registry-hash-table r)))))
 
 (defgeneric register% (registry collectable)
-  (:method ((registry registry) collectable)
+  (:method ((registry registry) (collectable collectable))
     (synchronize registry
-      (when (gethash (collectable-name collectable) (registry-hash-table registry))
-        (error "Collectable already registered '~a'" (collectable-name collectable))) ;; TODO: customize error
+      (when-let ((c (gethash (collectable-name collectable) (registry-hash-table registry))))
+        (unless (eq c collectable)
+          (error 'collectable-already-registered-error :collectable collectable :registry registry :rname (collectable-name collectable))))
       (setf (gethash (collectable-name collectable) (registry-hash-table registry)) collectable))))
 
 (defgeneric unregister% (registry collectable)
-  (:method ((registry registry) collectable)
-    (remhash (collectable-name collectable) (registry-hash-table registry))))
+  (:method ((registry registry) (collectable collectable))
+    (unregister% registry (collectable-name collectable) ))
+  (:method ((registry registry) (collectable-name string))
+    (remhash collectable-name (registry-hash-table registry))))
 
 (defgeneric registered-p% (register collectable-designator)
   (:method ((registry registry) (collectable collectable))
