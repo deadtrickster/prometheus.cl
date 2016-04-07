@@ -57,4 +57,5 @@
            #:invalid-labels-error
            #:invalid-metric-name-error
            #:invalid-buckets-error
-           #:invalid-bucket-bound-error))
+           #:invalid-bucket-bound-error
+           #:collectable-already-registered-error))

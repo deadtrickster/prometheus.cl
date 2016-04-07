@@ -47,3 +47,10 @@
   ()
   (:report (lambda (error stream)
              (format stream "Bucket bound ~s is invalid. Reason: ~a" (slot-value error 'value) (slot-value error 'reason)))))
+
+(define-condition collectable-already-registered-error (base-error)
+  ((collectable :initarg :collectable)
+   (registry :initarg :registry)
+   (rname :initarg :rname))
+  (:report (lambda (error stream)
+             (format stream "Collectable ~s already registered in registry ~s with name ~s" (slot-value error 'collectable) (slot-value error 'registry) (slot-value error 'rname)))))

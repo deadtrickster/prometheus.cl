@@ -77,6 +77,11 @@
     (error-class-exists prom:invalid-bucket-bound-error prom:invalid-value-error)
 
     (error-report-test prom:invalid-bucket-bound-error ((:value "QWE" :reason "bucket bound is not an integer/float")
-                                                       "Bucket bound \"QWE\" is invalid. Reason: bucket bound is not an integer/float"))))
+                                                        "Bucket bound \"QWE\" is invalid. Reason: bucket bound is not an integer/float")))
+
+  (subtest "Collectable Already Registered Error"
+    (error-class-exists prom:collectable-already-registered-error)
+    (error-report-test prom:collectable-already-registered-error ((:collectable 1 :registry 2 :rname 3)
+                                                                  "Collectable 1 already registered in registry 2 with name 3"))))
 
 (finalize)
