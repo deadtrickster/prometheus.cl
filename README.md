@@ -1,4 +1,4 @@
-# Prometheus.io Common Lisp Client [![Build Status](https://travis-ci.org/deadtrickster/prometheus.cl.svg?branch=master)](https://travis-ci.org/deadtrickster/prometheus.cl)
+# Prometheus.io Common Lisp Client [![Build Status](https://travis-ci.org/deadtrickster/prometheus.cl.svg?branch=master)](https://travis-ci.org/deadtrickster/prometheus.cl) [![Coverage Status](https://coveralls.io/repos/github/deadtrickster/prometheus.cl/badge.svg?branch=master)](https://coveralls.io/github/deadtrickster/prometheus.cl?branch=master)
 
 Example Grafana dashboard for Hunchentoot on SBCL:
 
