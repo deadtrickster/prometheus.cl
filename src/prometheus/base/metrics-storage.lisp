@@ -29,3 +29,9 @@
 (defgeneric add-metric (storage metric)
   (:method ((storage ht-metrics-storage) metric)
     (setf (gethash (metric-labels metric) (metrics-storage-ht storage)) metric)))
+
+(defgeneric get-or-add-metric (storage labels mfactory)
+  (:method ((storage ht-metrics-storage) labels mfactory)
+    (synchronize storage
+      (or (get-metric storage labels)
+          (add-metric storage (funcall mfactory labels))))))
