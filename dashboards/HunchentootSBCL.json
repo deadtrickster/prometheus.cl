@@ -60,11 +60,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "irate(http_requests_count[1m])",
+              "expr": "irate(http_requests_total{app=\"example_app\"}[1m])",
               "interval": "",
               "intervalFactor": 2,
               "legendFormat": "Test Site",
-              "metric": "http_requests_count",
+              "metric": "http_requests_total",
               "refId": "A",
               "step": 2
             }
@@ -139,10 +139,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, rate(http_requests_duration_bucket[15m]))",
+              "expr": "histogram_quantile(0.95, rate(http_request_duration_milliseconds_bucket[15m]))",
               "intervalFactor": 2,
               "legendFormat": "Test Site",
-              "metric": "http_requests_duration_sum",
+              "metric": "http_request_duration_milliseconds_bucket",
               "refId": "A",
               "step": 2
             }
@@ -598,6 +598,6 @@
   },
   "refresh": "10s",
   "schemaVersion": 8,
-  "version": 5,
+  "version": 6,
   "links": []
 }
