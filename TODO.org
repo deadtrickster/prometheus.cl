@@ -7,9 +7,15 @@
   - [X] Travis CI setup
   - [X] Coveralls setup
 - [ ] Version 0.2
-  - [ ] Pushgateway
   - [ ] Benchmarks
+  - [ ] GZip threshold
   - [ ] Locks cleanup
   - [ ] Maybe optimize no-labels case
 - [ ] Version 0.3
+  - [ ] Pushgateway
+- [ ] Version 0.4
   - [ ] Full Summary implementation
+- [ ] Version 0.5
+  - [ ] Protobuf format
+- [ ] Version 0.6
+  - [ ] Maybe replace mutexes with CAS and smth like DoubleAdder from Java
