@@ -18,9 +18,8 @@
 
 (defgeneric gauge.set% (gauge value labels)
   (:method ((gauge gauge) value labels)
-    (synchronize gauge
-      (let ((metric (get-metric gauge labels)))
-        (gauge.set% metric value labels))))
+    (let ((metric (get-metric gauge labels)))
+      (gauge.set% metric value labels)))
   (:method ((gauge gauge-metric) value labels)
     (declare (ignore labels))
     (synchronize gauge
@@ -32,9 +31,8 @@
 
 (defgeneric gauge.reset (gauge &key labels)
   (:method ((gauge gauge) &key labels)
-    (synchronize gauge
-      (let ((metric (get-metric gauge labels)))
-        (gauge.reset metric))))
+    (let ((metric (get-metric gauge labels)))
+      (gauge.reset metric)))
   (:method ((gauge gauge-metric) &key labels)
     (declare (ignore labels))
     (synchronize gauge

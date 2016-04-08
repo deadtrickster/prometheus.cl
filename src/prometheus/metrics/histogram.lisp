@@ -60,9 +60,8 @@
 
 (defgeneric histogram.observe% (histogram value labels)
   (:method ((histogram histogram) value labels)
-    (synchronize histogram
-      (let ((metric (get-metric histogram labels)))
-        (histogram.observe% metric value labels))))
+    (let ((metric (get-metric histogram labels)))
+      (histogram.observe% metric value labels)))
   (:method ((metric histogram-metric) value labels)
     (declare (ignore labels))
     (synchronize metric

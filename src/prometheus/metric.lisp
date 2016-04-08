@@ -12,7 +12,7 @@
   (check-metric-name-is-string name)
   (check-metric-name-regex name))
 
-(defclass metric-family (collectable synchronizable)
+(defclass metric-family (collectable)
   ((name :initarg :name :reader metric-family-name)
    (help :initform nil :initarg :help :reader metric-family-help)
    (type :initform "untyped" :initarg :type :reader metric-family-type)
@@ -62,8 +62,8 @@
 
 (defmethod get-metric ((mf metric-family) labels)
   (check-label-values labels (metric-family-labels mf))
-  (or (get-metric (metric-family-metrics mf) labels)
-      (add-metric (metric-family-metrics mf) (mf-make-metric mf labels))))
+  (get-or-add-metric (metric-family-metrics mf) labels
+                     (lambda (labels) (mf-make-metric mf labels))))
 
 (defmethod get-metrics ((mf metric-family))
   (get-metrics (metric-family-metrics mf)))

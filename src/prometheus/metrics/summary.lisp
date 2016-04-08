@@ -19,9 +19,8 @@
 
 (defgeneric summary.observe% (summary value count labels)
   (:method ((summary summary) value count labels)
-    (synchronize summary
-      (let ((metric (get-metric summary labels)))
-        (summary.observe% metric value count nil))))
+    (let ((metric (get-metric summary labels)))
+      (summary.observe% metric value count nil)))
   (:method ((summary summary-metric) value count labels)
     (declare (ignore labels))
     (synchronize summary

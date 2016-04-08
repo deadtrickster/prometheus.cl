@@ -20,9 +20,8 @@
 
 (defgeneric counter.inc% (counter n labels)
   (:method ((counter counter) n labels)
-    (synchronize counter
-      (let ((metric (get-metric counter labels)))
-        (counter.inc% metric n labels))))
+    (let ((metric (get-metric counter labels)))
+      (counter.inc% metric n labels)))
   (:method ((counter counter-metric) n labels)
     (declare (ignore labels))
     (synchronize counter
@@ -34,9 +33,8 @@
 
 (defgeneric counter.reset (counter &key labels)
   (:method ((counter counter) &key labels)
-    (synchronize counter
-      (let ((metric (get-metric counter labels)))
-        (counter.reset metric))))
+    (let ((metric (get-metric counter labels)))
+      (counter.reset metric)))
   (:method ((counter counter-metric) &key labels)
     (declare (ignore labels))
     (synchronize counter
