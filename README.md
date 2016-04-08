@@ -7,6 +7,8 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
 ### Example Quick Start
+Currently example uses Linux and SBCL specific collectors. 
+
 ```lisp
 (ql:quickload :prometheus.example)
 (prometheus.example:run)
