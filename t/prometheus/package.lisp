@@ -17,5 +17,5 @@
              report)))
 
 (defmacro with-fresh-registry (&body body)
-  `(let ((prom:*default-registry* (make-instance 'prom:registry)))
+  `(let ((prom:*default-registry* (prom:make-registry)))
      ,@body))

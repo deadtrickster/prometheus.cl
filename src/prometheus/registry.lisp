@@ -47,3 +47,6 @@
 
 (defun registeredp (collectable &optional (register *default-registry*))
   (registered-p% register collectable))
+
+(defun make-registry ()
+  (make-instance 'registry))

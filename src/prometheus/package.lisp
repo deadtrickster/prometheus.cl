@@ -8,6 +8,7 @@
            #:register
            #:unregister
            #:registeredp
+           #:make-registry
            #:collect
            #:collector
            #:collector-metric-name
