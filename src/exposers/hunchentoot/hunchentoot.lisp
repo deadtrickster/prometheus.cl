@@ -24,7 +24,7 @@
       "<html>
 <head><title>Welcome to Prometheus Exporter!</title></head>
 <body>
-<h1>Node Exporter</h1>
+<h1>Prometheus Hunchentoot Exporter</h1>
 <p><a href='/metrics'>Metrics</a></p>
 </body>
 </html>"))
