@@ -11,7 +11,7 @@
 
 (defun run-all-ci ()
   (let ((result))
-    (coveralls:with-coveralls (:exclude "t")
+    (coveralls:with-coveralls (:exclude '("t" "examples"))
       (setf result (run-all)))
     (unless result
       (uiop:quit 1))))
