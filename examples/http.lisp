@@ -1,7 +1,7 @@
 (in-package :cl-user)
 
 (defparameter *http-requests-counter*
-  (prom:make-counter :name "http_requests" :help "Counts http request by type" :labels '("request_type")))
+  (prom:make-counter :name "http_requests_total" :help "Counts http request by type" :labels '("method")))
 
 (prom:counter.inc *http-requests-counter* :labels '("get"))
 
@@ -11,7 +11,7 @@
 (prometheus.text:marshal)
 
 "# TYPE http_requests counter
-# HELP http_requests Counts http request by type
-http_requests{request_type=\"post\"} 25
-http_requests{request_type=\"get\"} 1
+# HELP http_requests_total Counts http request by method
+http_requests_total{request_type=\"post\"} 25
+http_requests_total{request_type=\"get\"} 1
 "
