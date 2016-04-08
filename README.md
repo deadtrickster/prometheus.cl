@@ -6,6 +6,14 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
+### Example Quick Start
+```lisp
+(ql:quickload :prometheus.example)
+(prometheus.example:run)
+```
+You can override app/exporter host/port in `prometheus.example:run` arguments. To stop example app call `prometheus.example:stop`
+
+
 ## Metric Types
 
 - Counter
