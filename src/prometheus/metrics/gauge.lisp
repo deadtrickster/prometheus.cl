@@ -21,9 +21,16 @@
     (let ((metric (get-metric gauge labels)))
       (gauge.set% metric value labels)))
   (:method ((gauge gauge-metric) value labels)
-    (declare (ignore labels))
+    (declare (ignore labels)
+             (optimize (speed 3) (debug 0) (safety 0)))
+   #-sbcl
     (synchronize gauge
-      (setf (slot-value gauge 'value) value))))
+      (setf (slot-value gauge 'value) value))
+    #+sbcl
+    (loop
+      as old = (slot-value gauge 'value)
+      when (= old (sb-ext:cas (slot-value gauge 'value) old value)) do
+         (return))))
 
 (defun gauge.set (gauge value &key labels)
   (check-gauge-value value)
