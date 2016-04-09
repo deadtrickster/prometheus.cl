@@ -24,6 +24,7 @@
                  (:test-file "dummy")
                  (:test-file "errors")
                  (:test-file "counter")
+                 (:test-file "int-counter")
                  (:test-file "gauge")
                  (:test-file "summary")
                  (:test-file "histogram"))))
