@@ -23,9 +23,16 @@
     (let ((metric (get-metric counter labels)))
       (counter.inc% metric n labels)))
   (:method ((counter counter-metric) n labels)
-    (declare (ignore labels))
+    (declare (ignore labels)
+             (optimize (speed 3) (debug 0) (safety 0)))
+    #-sbcl
     (synchronize counter
-      (incf (slot-value counter 'value) n))))
+      (incf (slot-value counter 'value) n))
+    #+sbcl
+    (loop
+      as old =  (slot-value counter 'value)
+      when (= old (sb-ext:cas  (slot-value counter 'value) old (incf old n))) do
+         (return))))
 
 (defun counter.inc (counter &key (value 1) labels)
   (check-counter-value value)

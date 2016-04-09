@@ -29,5 +29,6 @@
                   ((:file "counter")
                    (:file "gauge")
                    (:file "histogram")
-                   (:file "summary"))))))
+                   (:file "summary")
+                   (:file "int-counter"))))))
   :description "Prometheus.io Client")

@@ -27,6 +27,8 @@
            #:counter-metric
            #:counter.inc
            #:counter.reset
+           #:int-counter
+           #:make-int-counter
            #:gauge
            #:make-gauge
            #:gauge-metric
