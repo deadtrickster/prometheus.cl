@@ -7,6 +7,7 @@
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"
   :licence "MIT"
   :depends-on ("prometheus"
+               "prometheus.formats.text"
                "prove"
                "log4cl"
                "mw-equiv"
