@@ -42,6 +42,8 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 Linux? only
 
 ## Performance / Optimization
+
+### Counter
 On SBCL counter can use CAS. On SBCL int counter can use atomic-incf.
 
 Benchmark (30 threads each doing 100000 counter.inc):
@@ -51,6 +53,16 @@ Benchmark (30 threads each doing 100000 counter.inc):
 | Mutex         | 7885        |
 | CAS (SBCL)    | 1902        |
 | ATOMIC (SBCL) | 141         |
+
+### Gauge
+On SBCL gauge can use CAS.
+
+Benchmark (30 threads each doing 100000 gauge.set):
+
+| Method        | Avg set n/s |
+| ------------- |:-----------:|
+| Mutex         | 9618        |
+| CAS (SBCL)    | 2204        |
 
 ## Exposers
 
