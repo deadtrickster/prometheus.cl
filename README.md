@@ -19,6 +19,7 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 ## Metric Types
 
 - Counter
+- Int Counter (can only work with unsigned int64)
 - Gauge
 - Histogram
 - Summary (without quantiles for now)
@@ -39,6 +40,17 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
  - Process uptime
  
 Linux? only
+
+## Performance / Optimization
+On SBCL counter can use CAS. On SBCL int counter can use atomic-incf.
+
+Benchmark (30 threads each doing 100000 counter.inc):
+
+| Method        | Avg inc n/s |
+| ------------- |:-----------:|
+| Mutex         | 7885        |
+| CAS (SBCL)    | 1902        |
+| ATOMIC (SBCL) | 141         |
 
 ## Exposers
 
