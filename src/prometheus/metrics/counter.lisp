@@ -25,13 +25,13 @@
   (:method ((counter counter-metric) n labels)
     (declare (ignore labels)
              (optimize (speed 3) (debug 0) (safety 0)))
-    #-sbcl
+    #-(or sbcl ccl lispworks)
     (synchronize counter
       (incf (slot-value counter 'value) n))
-    #+sbcl
+    #+(or sbcl ccl lispworks)
     (loop
-      as old =  (slot-value counter 'value)
-      when (= old (sb-ext:cas  (slot-value counter 'value) old (incf old n))) do
+      as old = (slot-value counter 'value)
+      when (cas (slot-value counter 'value) old (incf old n)) do
          (return))))
 
 (defun counter.inc (counter &key (value 1) labels)

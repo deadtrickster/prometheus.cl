@@ -23,13 +23,13 @@
   (:method ((gauge gauge-metric) value labels)
     (declare (ignore labels)
              (optimize (speed 3) (debug 0) (safety 0)))
-   #-sbcl
+   #-(or sbcl ccl lispworks)
     (synchronize gauge
       (setf (slot-value gauge 'value) value))
-    #+sbcl
+    #+(or sbcl ccl lispworks)
     (loop
       as old = (slot-value gauge 'value)
-      when (= old (sb-ext:cas (slot-value gauge 'value) old value)) do
+      when (cas (slot-value gauge 'value) old value) do
          (return))))
 
 (defun gauge.set (gauge value &key labels)

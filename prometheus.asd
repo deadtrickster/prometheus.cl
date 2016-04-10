@@ -15,6 +15,7 @@
                   :serial t
                   :components
                   ((:file "errors")
+                   (:file "cas")
                    (:file "synchronizable")
                    (:file "collectable")
                    (:file "metrics-storage")
