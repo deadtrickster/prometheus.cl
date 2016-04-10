@@ -23,9 +23,14 @@
       (summary.observe% metric value count nil)))
   (:method ((summary summary-metric) value count labels)
     (declare (ignore labels))
+    #-(or sbcl lispworks)
     (synchronize summary
       (incf (slot-value summary 'value) count)
-      (incf (slot-value summary 'sum) value))))
+      (incf (slot-value summary 'sum) value))
+    #+(or sbcl lispworks)
+    (progn
+      (cas-incf (slot-value summary 'value) count)
+      (cas-incf (slot-value summary 'sum) value))))
 
 (defun summary.observe (summary value &key (count 1) labels)
   (check-summary-value value)

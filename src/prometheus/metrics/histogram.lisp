@@ -64,13 +64,22 @@
       (histogram.observe% metric value labels)))
   (:method ((metric histogram-metric) value labels)
     (declare (ignore labels))
+    #-(or sbcl lispworks)
     (synchronize metric
       (loop for bucket across (metric-value metric)
             do
                (when (<= value (bucket-bound bucket))
                  (incf (bucket-count bucket))
                  (return)))
-      (incf (slot-value metric 'sum) value))))
+      (incf (slot-value metric 'sum) value))
+    #+(or sbcl lispworks)
+    (progn
+      (loop for bucket across (metric-value metric)
+            do
+               (when (<= value (bucket-bound bucket))
+                 (cas-incf (bucket-count bucket) 1)
+                 (return)))
+      (cas-incf (slot-value metric 'sum) value))))
 
 (defun histogram.observe (histogram value &key labels)
   (check-histogram-value value)
@@ -79,7 +88,7 @@
 (defmacro histogram.time (histogram &body body)
   `(timing% (lambda (time)
               (histogram.observe ,histogram time))
-            (lambda () ,@body)))
+     (lambda () ,@body)))
 
 (defun make-histogram (&key name help labels buckets value (registry *default-registry*))
   (check-value-or-labels value labels)
