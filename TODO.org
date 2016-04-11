@@ -6,10 +6,10 @@
   - [X] Tests
   - [X] Travis CI setup
   - [X] Coveralls setup
-- [ ] Version 0.2
+- [-] Version 0.2
   - [ ] Benchmarks
-  - [ ] GZip threshold
-  - [ ] Locks cleanup
+  - [X] GZip threshold
+  - [X] Locks cleanup
   - [ ] Maybe optimize no-labels case
 - [ ] Version 0.3
   - [ ] Pushgateway
