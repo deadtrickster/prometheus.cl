@@ -12,7 +12,8 @@
                "prove"
                "log4cl"
                "mw-equiv"
-               "cl-interpol")
+               "cl-interpol"
+               "chipz")
   :serial t
   :components ((:module "t/exposers/hunchentoot"
                 :serial t
