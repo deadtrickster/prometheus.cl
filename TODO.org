@@ -6,8 +6,8 @@
   - [X] Tests
   - [X] Travis CI setup
   - [X] Coveralls setup
-- [-] Version 0.2
-  - [ ] Benchmarks
+- [X] Version 0.2
+  - [X] Benchmarks
   - [X] Hunchentoot exposer gzip compression
   - [X] Locks cleanup
   - [X] Optimize no-labels case
