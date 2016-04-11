@@ -2,7 +2,7 @@
   :serial t
   :version "0.1"
   :licence "MIT"
-  :depends-on ("prometheus" "prometheus.formats.text" "hunchentoot")
+  :depends-on ("prometheus" "prometheus.formats.text" "hunchentoot" "salza2")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
   :components ((:module "src/exposers/hunchentoot"
                 :serial t
