@@ -67,6 +67,12 @@
              (prom:counter.inc c))
       (print (prom:metric-value c)))))
 
+(defun test-labels (threads repeat warm)
+  (let* ((c (prom::make-int-counter :name "qwe" :labels '("label1" "label2" "label3") :help "qwe" :registry nil)))
+    (/ (ptiming (:threads threads :repeat repeat :warm warm)
+         (prom:get-metric c '("4" "5" "6"))
+         (prom:get-metric c '("1" "2" "3")))
+       2)))
 
 (defun test-gauge (threads repeat warm)
   (let* ((c (prom:make-gauge :name "qwe" :help "qwe" :labels '("label1" "label2" "label3") :registry nil))
