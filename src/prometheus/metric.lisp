@@ -17,7 +17,8 @@
    (help :initform nil :initarg :help :reader metric-family-help)
    (type :initform "untyped" :initarg :type :reader metric-family-type)
    (labels :initform nil :initarg :labels :reader metric-family-labels)
-   (metrics :initform (make-instance 'ht-metrics-storage) :initarg :metrics :reader metric-family-metrics)))
+   (metrics :initform nil :initarg :metrics :reader metric-family-metrics)
+   (no-labels-metric :initform nil :initarg :no-labels-metric :reader metric-family-no-labels-metric)))
 
 (defmethod print-object ((instance metric-family) stream)
   (print-unreadable-object (instance stream :type t :identity t)
@@ -26,18 +27,18 @@
 (defun reverse-plist (plist)
   "Courtesy of 'igam' from #lisp"
   (loop for cur on (reverse plist)
-                by #'cddr
-                while cur
-                collect (cadr cur) collect (car cur)))
+        by #'cddr
+        while cur
+        collect (cadr cur) collect (car cur)))
 
 (define-method-combination validator ()
-         ((primary () :order :most-specific-last :required t))
-   (let ((form (if (rest primary)
-                   `(reverse-plist (append ,@(mapcar #'(lambda (method)
-                                                         `(call-method ,method))
-                                                     primary)))
-                   `(call-method ,(first primary)))))
-     form))
+  ((primary () :order :most-specific-last :required t))
+  (let ((form (if (rest primary)
+                  `(reverse-plist (append ,@(mapcar #'(lambda (method)
+                                                        `(call-method ,method))
+                                                    primary)))
+                  `(call-method ,(first primary)))))
+    form))
 
 (defgeneric validate-args (mv &rest initargs &key &allow-other-keys)
   (:method-combination validator)
@@ -53,7 +54,10 @@
 (defmethod initialize-instance :after ((mf metric-family) &rest initargs &key registry &allow-other-keys)
   (declare (ignore initargs))
   (when registry
-    (register mf registry)))
+    (register mf registry))
+  (if (metric-family-labels mf)
+      (setf (slot-value mf 'metrics) (make-instance 'ht-metrics-storage))
+      (setf (slot-value mf 'no-labels-metric) (mf-make-metric mf nil))))
 
 (defgeneric mf-make-metric (metric-family labels))
 
@@ -61,16 +65,24 @@
   (funcall cb mf))
 
 (defmethod get-metric ((mf metric-family) labels)
-  (check-label-values labels (metric-family-labels mf))
-  (get-or-add-metric (metric-family-metrics mf) labels
-                     (lambda (labels) (mf-make-metric mf labels))))
+  (or (and (not labels)
+           (metric-family-no-labels-metric mf))
+    (progn
+      (check-label-values labels (metric-family-labels mf))
+      (get-or-add-metric (metric-family-metrics mf) labels
+                         (lambda (labels) (mf-make-metric mf labels))))))
 
 (defmethod get-metrics ((mf metric-family))
-  (get-metrics (metric-family-metrics mf)))
+  (if-let ((nlm (metric-family-no-labels-metric mf)))
+    (list nlm)
+    (get-metrics (metric-family-metrics mf))))
 
 (defclass metric (synchronizable)
   ((labels :initform nil :initarg :labels :reader metric-labels)
    (value :initarg :value :reader metric-value)))
+
+(defmethod metric-value ((mf metric-family))
+  (metric-value (get-metric mf nil)))
 
 (defclass simple-metric (metric)
   ())

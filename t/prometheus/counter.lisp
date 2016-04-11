@@ -10,13 +10,20 @@
     (is-error-report (prom:make-counter :name "qwe" :value 12 :labels '("qwe") :registry nil) prom:invalid-value-error "Value 12 is invalid. Reason: can only specify at most one of value and labels"))
 
   (subtest "INC & RESET"
-    (let* ((c (prom:make-counter :name "qwe" :value 12 :registry nil))
-           (nlm (prom:get-metric c nil)))
-      (prom:counter.inc nlm :value 2)
-      (prom:counter.inc nlm)
-      (is (prom:metric-value nlm) 15)
-      (prom:counter.reset c)
-      (is (prom:metric-value nlm) prom::+counter-default+)))
+    (subtest "No labels"
+      (let* ((c (prom:make-counter :name "qwe" :value 12 :registry nil)))
+        (prom:counter.inc c :value 2)
+        (prom:counter.inc c)
+        (is (prom:metric-value c) 15)
+        (prom:counter.reset c)
+        (is (prom:metric-value c) prom::+counter-default+)))
+    (subtest "With labels"
+      (let* ((c (prom:make-counter :name "qwe" :labels '("method") :registry nil)))
+        (prom:counter.inc c :value 2 :labels '("get"))
+        (prom:counter.inc c :labels '("get"))
+        (is (prom:metric-value (prom:get-metric c '("get"))) 3)
+        (prom:counter.reset c :labels '("get"))
+        (is (prom:metric-value (prom:get-metric c '("get"))) prom::+counter-default+))))
 
   (subtest "REGISTRY"
     (with-fresh-registry
