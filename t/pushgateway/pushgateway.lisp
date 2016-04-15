@@ -2,67 +2,6 @@
 
 (plan 1)
 
-(define-constant +expected-metrics-text+ "# TYPE requests_counter counter
-# HELP requests_counter Hunchentoot requires counter
-requests_counter{type=\"post\"} 12
-requests_counter{type=\"get\"} 5
-# TYPE total_memory gauge
-# HELP total_memory SBCL total memory
-total_memory 566
-# TYPE render_time histogram
-# HELP render_time qwe
-render_time_bucket{type=\"pdf\", le=\"2\"} 0
-render_time_bucket{type=\"pdf\", le=\"4\"} 0
-render_time_bucket{type=\"pdf\", le=\"6\"} 1
-render_time_bucket{type=\"pdf\", le=\"+Inf\"} 1
-render_time_sum{type=\"pdf\"} 4.5
-render_time_count{type=\"pdf\"} 1
-render_time_bucket{type=\"html\", le=\"2\"} 2
-render_time_bucket{type=\"html\", le=\"4\"} 2
-render_time_bucket{type=\"html\", le=\"6\"} 3
-render_time_bucket{type=\"html\", le=\"+Inf\"} 3
-render_time_sum{type=\"html\"} 6.0
-render_time_count{type=\"html\"} 3
-# TYPE traffic_summary summary
-# HELP traffic_summary traffic summary
-traffic_summary_sum 55.3
-traffic_summary_count 2
-" :test #'equal)
-
-(defun assemble-test-metrics ()
-  (with-fresh-registry
-    (let ((rc (prom:make-counter :name "requests_counter" :help "Hunchentoot requires counter" :labels '("type")))
-          (tmg (prom:make-gauge :name "total_memory" :help "SBCL total memory"))
-          (h (prom:make-histogram :name "render_time" :help "qwe" :labels '("type") :buckets '(2 4 6)))
-          (s (prom:make-summary :name "traffic_summary" :help "traffic summary" :value 12)))
-      (prom:counter.inc rc :value 5 :labels '("get"))
-      (prom:counter.inc rc :value 12 :labels '("post"))
-      (prom:gauge.set tmg 566)
-      (prom:histogram.observe h 4.5 :labels '("html"))
-      (prom:histogram.observe h 1 :labels '("html"))
-      (prom:histogram.observe h 0.5 :labels '("html"))
-      (prom:histogram.observe h 4.5 :labels '("pdf"))
-      (prom:summary.observe s 43.3d0))
-    prom:*default-registry*))
-
-(defclass my-acceptor (tbnl:acceptor)
-  ((requests :initform nil :accessor my-acceptor-requests)))
-
-(defmethod tbnl:acceptor-log-access ((acceptor my-acceptor) &key return-code)
-  (declare (ignore return-code)))
-
-(defmethod tbnl:acceptor-log-message ((acceptor my-acceptor) log-level format-string &rest format-arguments)
-  (declare (ignore log-level format-string format-arguments)))
-
-(defmethod tbnl:acceptor-dispatch-request ((acceptor my-acceptor) request)
-  (push (list (tbnl:request-method request)
-              (tbnl:request-uri request)
-              (tbnl:header-in :content-type request)
-              (tbnl:raw-post-data :request request :force-text t))
-        (my-acceptor-requests acceptor))
-  (setf (tbnl:return-code*) tbnl:+http-accepted+)
-  (tbnl:abort-request-handler))
-
 (defun test-replace (address acceptor)
   (subtest "REPLACE"
     (prom.pushgateway:replace "test" :gateway address
@@ -95,18 +34,29 @@ traffic_summary_count 2
       (is (third req) nil)
       (is (fourth req) nil))))
 
-(subtest "Pushgateway test"
-  (let ((metrics-acceptor)
-        (pushgateway-address "localhost:9131"))
-    (unwind-protect
-         (progn
-           (setf metrics-acceptor (tbnl:start (make-instance 'my-acceptor :address "localhost"
-                                                                          :port 9131)))
-           (sleep 1)
-           (test-replace pushgateway-address metrics-acceptor)
-           (test-push pushgateway-address metrics-acceptor)
-           (test-delete pushgateway-address metrics-acceptor))
-      (when metrics-acceptor
-        (tbnl:stop metrics-acceptor :soft t)))))
+(subtest "PUSHGATEWAY"
+  (subtest "Errors & Validatoins"
+    (is-error-report (prom.pushgateway:delete :qwe) prom:invalid-value-error "Label value :QWE is invalid. Reason: job name is not a string")
+    (is-error-report (prom.pushgateway:delete "qwe/qwe") prom:invalid-value-error "Label value \"qwe/qwe\" is invalid. Reason: job name contains / or %2f")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key :qwe) prom:invalid-labels-error "Invalid labels. Got :QWE (type: KEYWORD), expected PLIST")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '(1)) prom:invalid-labels-error "Invalid labels. Got (1) (type: CONS), expected PLIST")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '(:qwe "qwe")) prom:invalid-label-name-error "Label name :QWE is invalid. Reason: label name is not a string")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("q/we" "qwe")) prom:invalid-label-name-error "Label name \"q/we\" is invalid. Reason: label name doesn't match regex [a-zA-Z_][a-zA-Z0-9_]*")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("qwe" :qwe)) prom:invalid-label-value-error "Label value :QWE is invalid. Reason: label value is not a string")
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("qwe" "q/we")) prom:invalid-label-value-error "Label value \"q/we\" is invalid. Reason: label value contains / or %2f"))
+
+  (subtest "API"
+    (let ((metrics-acceptor)
+          (pushgateway-address "localhost:9131"))
+      (unwind-protect
+           (progn
+             (setf metrics-acceptor (tbnl:start (make-instance 'my-acceptor :address "localhost"
+                                                                            :port 9131)))
+             (sleep 1)
+             (test-replace pushgateway-address metrics-acceptor)
+             (test-push pushgateway-address metrics-acceptor)
+             (test-delete pushgateway-address metrics-acceptor))
+        (when metrics-acceptor
+          (tbnl:stop metrics-acceptor :soft t))))))
 
 (finalize)

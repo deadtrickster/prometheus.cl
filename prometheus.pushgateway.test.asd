@@ -19,6 +19,8 @@
                 :components
                 ((:file "package")
                  (:test-file "dummy")
+                 (:file "test-server")
+                 (:file "test-metrics")
                  (:test-file "pushgateway"))))
   :defsystem-depends-on (:prove-asdf)
   :perform (asdf:test-op :after (op c)
