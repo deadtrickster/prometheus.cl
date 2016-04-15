@@ -9,5 +9,6 @@
                 :serial t
                 :components
                 ((:file "package")
+                 (:file "escape")
                  (:file "text"))))
   :description "Prometheus.io Client Text format")

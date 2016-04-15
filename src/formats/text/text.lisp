@@ -13,7 +13,10 @@
 
 (defun print-sample-line (stream name lables lvalues value)
   (let ((*read-default-float-format* 'double-float))
-    (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar #'list lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
+    (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar (lambda (lname lvalue)
+                                                                            (list lname (if (stringp lvalue)
+                                                                                            (escape-label-value lvalue)
+                                                                                            lvalue))) lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
 
 (defgeneric metric-to-text (metric name family-lables stream)
   (:method ((metric prom:simple-metric) name family-lables stream)
@@ -48,13 +51,12 @@
                        (prom:metric-labels metric)
                        (prom:metric-value metric))))
 
-
 (defgeneric metric-family-to-text (mf stream)
   (:method ((mf prom::metric-family) stream)
     (let ((name (prom::metric-family-name mf))
           (labels (prom:metric-family-labels mf)))
       (format stream "# TYPE ~a ~a~%" name (prom:metric-family-type mf))
-      (format stream "# HELP ~a ~a~%" name (prom:metric-family-help mf))
+      (format stream "# HELP ~a ~a~%" name (escape-metric-help (prom:metric-family-help mf)))
       (loop for metric in (prom::get-metrics mf) do
             (metric-to-text metric name labels stream)))))
 

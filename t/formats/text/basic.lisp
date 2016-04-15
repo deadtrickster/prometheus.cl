@@ -4,13 +4,15 @@
 
 (subtest "Basic test"
   (with-fresh-registry
-    (let ((rc (prom:make-counter :name "requests_counter" :help "Hunchentoot requests counter" :labels '("type")))
+    (let ((rc (prom:make-counter :name "requests_counter" :help "Hunch\\entoot
+requests counter" :labels '("type")))
           (ic (prom:make-int-counter :name "irequests_counter" :help "Hunchentoot requests counter" :labels '("type")))
           (tmg (prom:make-gauge :name "total_memory" :help "SBCL total memory"))
           (h (prom:make-histogram :name "render_time" :help "qwe" :labels '("type") :buckets '(2 4 6)))
           (s (prom:make-summary :name "traffic_summary" :help "traffic summary" :value 12)))
-      (prom:counter.inc rc :value 5 :labels '("get"))
-      (prom:counter.inc rc :value 12 :labels '("post"))
+      (prom:counter.inc rc :value 5 :labels '("ge\"t"))
+      (prom:counter.inc rc :value 12 :labels '("p\\os
+t"))
       (prom:counter.inc ic :value 5 :labels '("get"))
       (prom:counter.inc ic :value 12 :labels '("post"))
       (prom:gauge.set tmg 566)
@@ -20,9 +22,9 @@
       (prom:histogram.observe h 4.5 :labels '("pdf"))
       (prom:summary.observe s 43.3d0)
       (is (prom.text:marshal) "# TYPE requests_counter counter
-# HELP requests_counter Hunchentoot requests counter
-requests_counter{type=\"post\"} 12
-requests_counter{type=\"get\"} 5
+# HELP requests_counter Hunch\\\\entoot\\nrequests counter
+requests_counter{type=\"p\\\\os\\nt\"} 12
+requests_counter{type=\"ge\\\"t\"} 5
 # TYPE irequests_counter counter
 # HELP irequests_counter Hunchentoot requests counter
 irequests_counter{type=\"post\"} 12
