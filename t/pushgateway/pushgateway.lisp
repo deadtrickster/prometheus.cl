@@ -34,6 +34,16 @@
       (is (third req) nil)
       (is (fourth req) nil))))
 
+(defun test-error (address)
+  (subtest "ERROR"
+    (handler-case
+        (prom.pushgateway:delete "error" :gateway address)
+      (prom.pushgateway:pushgateway-error (e)
+        (ok "Pushgateway error is throwed")
+        (is (slot-value e 'prom.pushgateway::status-code) 404)
+        (is (slot-value e 'prom.pushgateway::body) "Not Found!")
+        (is-type (slot-value e 'prom.pushgateway::headers) 'list)))))
+
 (subtest "PUSHGATEWAY"
   (subtest "Errors & Validatoins"
     (is-error-report (prom.pushgateway:delete :qwe) prom:invalid-value-error "Label value :QWE is invalid. Reason: job name is not a string")
@@ -44,7 +54,13 @@
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '(:qwe "qwe")) prom:invalid-label-name-error "Label name :QWE is invalid. Reason: label name is not a string")
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("q/we" "qwe")) prom:invalid-label-name-error "Label name \"q/we\" is invalid. Reason: label name doesn't match regex [a-zA-Z_][a-zA-Z0-9_]*")
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("qwe" :qwe)) prom:invalid-label-value-error "Label value :QWE is invalid. Reason: label value is not a string")
-    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("qwe" "q/we")) prom:invalid-label-value-error "Label value \"q/we\" is invalid. Reason: label value contains / or %2f"))
+    (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '("qwe" "q/we")) prom:invalid-label-value-error "Label value \"q/we\" is invalid. Reason: label value contains / or %2f")
+
+    (subtest "Pushgateway Error"
+      (error-class-exists prom.pushgateway:pushgateway-error)
+
+      (error-report-test prom.pushgateway:pushgateway-error ((:status-code 123 :headers 12 :body 321)
+                                                             "Error talking to pushgateway. Response Code: 123, headers: 12, body: 321"))))
 
   (subtest "API"
     (let ((metrics-acceptor)
@@ -56,7 +72,8 @@
              (sleep 1)
              (test-replace pushgateway-address metrics-acceptor)
              (test-push pushgateway-address metrics-acceptor)
-             (test-delete pushgateway-address metrics-acceptor))
+             (test-delete pushgateway-address metrics-acceptor)
+             (test-error pushgateway-address))
         (when metrics-acceptor
           (tbnl:stop metrics-acceptor :soft t))))))
 
