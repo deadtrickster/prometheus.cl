@@ -8,6 +8,7 @@
   :licence "MIT"
   :depends-on ("prometheus.test"
                "prometheus.formats.text.test"
+               "prometheus.pushgateway.test"
                "prometheus.exposers.hunchentoot.test"
                "prometheus.collectors.process.test"
                "prometheus.collectors.sbcl.test"
