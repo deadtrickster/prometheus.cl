@@ -8,4 +8,6 @@
            #:delete)
   (:export #:push
            #:replace
-           #:delete))
+           #:delete
+
+           #:pushgateway-error))
