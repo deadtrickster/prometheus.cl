@@ -8,7 +8,7 @@
                            :method method
                            :content-type content-type
                            :content body)
-    (if (>= status-code 400)
+    (if (/= status-code 202)
         (error "Error talking to pushgateway. Response Code: ~a, body: ~a, headers: ~a" status-code body headers))))
 
 (defun push (job &key (gateway +default-pushgateway-address+)
@@ -23,4 +23,4 @@
 
 (defun delete (job &key (gateway +default-pushgateway-address+)
                         (grouping-key))
-  (http-request gateway :push job grouping-key prom.text:+content-type+ nil))
+  (http-request gateway :delete job grouping-key prom.text:+content-type+ nil))
