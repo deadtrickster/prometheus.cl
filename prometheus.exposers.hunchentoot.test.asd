@@ -1,7 +1,7 @@
 (in-package :cl-user)
 
 (asdf:defsystem :prometheus.exposers.hunchentoot.test
-  :version "0.2"
+  :version "0.3"
   :description "Tests for prometheus hunchentoot exposer"
   :maintainer "Ilya Khaprov <ilya.khaprov@publitechs.com>"
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"

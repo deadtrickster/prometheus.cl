@@ -1,7 +1,7 @@
 (in-package :cl-user)
 
 (asdf:defsystem :prometheus.test.all
-  :version "0.2"
+  :version "0.3"
   :description "All tests for Prometheus.cl"
   :maintainer "Ilya Khaprov <ilya.khaprov@publitechs.com>"
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"

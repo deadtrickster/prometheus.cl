@@ -1,7 +1,7 @@
 (in-package :cl-user)
 
 (asdf:defsystem :prometheus.collectors.process.test
-  :version "0.1"
+  :version "0.2"
   :description "Tests for prometheus process collector"
   :maintainer "Ilya Khaprov <ilya.khaprov@publitechs.com>"
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"
