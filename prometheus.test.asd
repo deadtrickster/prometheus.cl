@@ -12,6 +12,7 @@
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"
   :licence "MIT"
   :depends-on ("prometheus"
+               "prometheus.test.support"
                "prove"
                "log4cl"
                "mw-equiv"

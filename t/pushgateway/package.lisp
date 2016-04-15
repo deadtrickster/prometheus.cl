@@ -1,10 +1,6 @@
 (in-package #:cl-user)
 
 (defpackage #:prometheus.pushgateway.test
-  (:use #:cl #:prove #:alexandria))
+  (:use #:cl #:prove #:alexandria #:prometheus.test.support))
 
 (in-package #:prometheus.pushgateway.test)
-
-(defmacro with-fresh-registry (&body body)
-  `(let ((prom:*default-registry* (make-instance 'prom:registry)))
-     ,@body))
