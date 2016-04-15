@@ -3,6 +3,9 @@
 (define-constant +default-pushgateway-address+ "localhost:9091" :test #'equal)
 
 (defun http-request (gateway method job grouping-key content-type body)
+  (unless (and (listp grouping-key)
+               (evenp (length grouping-key)))
+    (error 'prom:invalid-labels-error :actual grouping-key :expected 'plist))
   (multiple-value-bind (body status-code headers)
       (drakma:http-request (format nil "http://~a/metrics/job/~a~:[~;~:*/~{~a~^/~}~]" gateway job grouping-key)
                            :method method
