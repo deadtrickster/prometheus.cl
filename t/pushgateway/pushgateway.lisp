@@ -38,6 +38,7 @@
   (subtest "Errors & Validatoins"
     (is-error-report (prom.pushgateway:delete :qwe) prom:invalid-value-error "Label value :QWE is invalid. Reason: job name is not a string")
     (is-error-report (prom.pushgateway:delete "qwe/qwe") prom:invalid-value-error "Label value \"qwe/qwe\" is invalid. Reason: job name contains / or %2f")
+    (is-error-report (prom.pushgateway:delete "") prom:invalid-value-error "Label value \"\" is invalid. Reason: job name is empty string")
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key :qwe) prom:invalid-labels-error "Invalid labels. Got :QWE (type: KEYWORD), expected PLIST")
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '(1)) prom:invalid-labels-error "Invalid labels. Got (1) (type: CONS), expected PLIST")
     (is-error-report (prom.pushgateway:delete "qwe" :grouping-key '(:qwe "qwe")) prom:invalid-label-name-error "Label name :QWE is invalid. Reason: label name is not a string")

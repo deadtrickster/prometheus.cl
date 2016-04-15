@@ -2,6 +2,16 @@
 
 (define-constant +default-pushgateway-address+ "localhost:9091" :test #'equal)
 
+(define-condition pushgateway-error (prom:base-error)
+  ((status-code :initarg :status-code)
+   (body :initarg :body)
+   (headers :initarg :headers))
+  (:report (lambda (error stream)
+             (format stream "Error talking to pushgateway. Response Code: ~a, headers: ~a, body: ~a"
+                     (slot-value error 'status-code)
+                     (slot-value error 'headers)
+                     (slot-value error 'body)))))
+
 (defun escape (str &optional (safe ""))
   "URI encodes/escapes the given string."
   (with-output-to-string (s)
@@ -21,6 +31,8 @@
 (defun validate-job-name (thing)
   (unless (stringp thing)
     (error 'prom:invalid-label-value-error :value thing :reason "job name is not a string"))
+  (when (equal "" thing)
+    (error 'prom:invalid-label-value-error :value thing :reason "job name is empty string"))
   (unless (check-no-/ thing)
     (error 'prom:invalid-label-value-error :value thing :reason "job name contains / or %2f")))
 
@@ -60,7 +72,7 @@
                            :content-type content-type
                            :content body)
     (if (/= status-code 202)
-        (error "Error talking to pushgateway. Response Code: ~a, body: ~a, headers: ~a" status-code body headers))))
+        (error 'pushgateway-error :status-code status-code :headers headers :body body))))
 
 (defun push (job &key (gateway +default-pushgateway-address+)
                       (registry prom:*default-registry*)
