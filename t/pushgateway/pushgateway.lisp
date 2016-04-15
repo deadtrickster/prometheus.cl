@@ -59,7 +59,9 @@ traffic_summary_count 2
               (tbnl:request-uri request)
               (tbnl:header-in :content-type request)
               (tbnl:raw-post-data :request request :force-text t))
-        (my-acceptor-requests acceptor)))
+        (my-acceptor-requests acceptor))
+  (setf (tbnl:return-code*) tbnl:+http-accepted+)
+  (tbnl:abort-request-handler))
 
 (defun test-replace (address acceptor)
   (subtest "REPLACE"
@@ -72,6 +74,27 @@ traffic_summary_count 2
       (is (third req) prom.text:+content-type+)
       (is (fourth req) +expected-metrics-text+))))
 
+(defun test-push (address acceptor)
+  (subtest "PUSH"
+    (prom.pushgateway:push "test" :gateway address
+                                  :registry (assemble-test-metrics)
+                                  :grouping-key '("label" "test"))
+    (let ((req (pop (my-acceptor-requests acceptor))))
+      (is (first req) :post)
+      (is (second req) "/metrics/job/test/label/test")
+      (is (third req) prom.text:+content-type+)
+      (is (fourth req) +expected-metrics-text+))))
+
+(defun test-delete (address acceptor)
+  (subtest "DELETE"
+    (prom.pushgateway:delete "test" :gateway address
+                                    :grouping-key '("label" "test"))
+    (let ((req (pop (my-acceptor-requests acceptor))))
+      (is (first req) :delete)
+      (is (second req) "/metrics/job/test/label/test")
+      (is (third req) nil)
+      (is (fourth req) nil))))
+
 (subtest "Pushgateway test"
   (let ((metrics-acceptor)
         (pushgateway-address "localhost:9131"))
@@ -80,7 +103,9 @@ traffic_summary_count 2
            (setf metrics-acceptor (tbnl:start (make-instance 'my-acceptor :address "localhost"
                                                                           :port 9131)))
            (sleep 1)
-           (test-replace pushgateway-address metrics-acceptor))
+           (test-replace pushgateway-address metrics-acceptor)
+           (test-push pushgateway-address metrics-acceptor)
+           (test-delete pushgateway-address metrics-acceptor))
       (when metrics-acceptor
         (tbnl:stop metrics-acceptor :soft t)))))
 
