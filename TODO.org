@@ -15,8 +15,10 @@
   - [X] Pushgateway
   - [X] Text format escaping
 - [ ] Version 0.4
-  - [ ] Full Summary implementation
+  - [ ] Bucket generators
 - [ ] Version 0.5
-  - [ ] Protobuf format
+  - [ ] Full Summary implementation
 - [ ] Version 0.6
+  - [ ] Protobuf format
+- [ ] Version 0.7
   - [ ] Maybe replace mutexes and CAS with smth like DoubleAdder from Java
