@@ -6,7 +6,7 @@
 (in-package :prometheus.test.system)
 
 (defsystem :prometheus.test
-  :version "0.3"
+  :version "0.4"
   :description "Tests for prometheus.cl"
   :maintainer "Ilya Khaprov <ilya.khaprov@publitechs.com>"
   :author "Ilya Khaprov <ilya.khaprov@publitechs.com> and CONTRIBUTORS"
