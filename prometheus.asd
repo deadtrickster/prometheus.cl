@@ -24,6 +24,7 @@
                  (:file "metric")
                  (:file "collector")
                  (:file "registry")
+                 (:file "buckets")
                  (:module "metrics"
                   :serial t
                   :components

@@ -51,6 +51,9 @@
            #:make-summary
            #:summary.observe
            #:summary.time
+           ;; buckets           
+           #:generate-linear-buckets
+           #:generate-exponential-buckets
            ;; errors
            #:base-error
            #:invalid-value-error
