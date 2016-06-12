@@ -24,6 +24,7 @@
                 ((:file "package")
                  (:test-file "dummy")
                  (:test-file "errors")
+                 (:test-file "buckets")
                  (:test-file "counter")
                  (:test-file "int-counter")
                  (:test-file "gauge")
