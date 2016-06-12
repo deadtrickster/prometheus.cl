@@ -1,6 +1,6 @@
 (asdf:defsystem :prometheus
   :serial t
-  :version "0.4"
+  :version "0.4.1"
   :licence "MIT"
   :depends-on ("alexandria"
                "bordeaux-threads"
