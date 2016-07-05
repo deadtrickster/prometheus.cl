@@ -9,7 +9,8 @@ requests counter" :labels '("type")))
           (ic (prom:make-int-counter :name "irequests_counter" :help "Hunchentoot requests counter" :labels '("type")))
           (tmg (prom:make-gauge :name "total_memory" :help "SBCL total memory"))
           (h (prom:make-histogram :name "render_time" :help "qwe" :labels '("type") :buckets '(2 4 6)))
-          (s (prom:make-summary :name "traffic_summary" :help "traffic summary" :value 12)))
+          (ss (prom:make-simple-summary :name "traffic_summary" :help "traffic summary" :value 12))
+          (s (prom:make-summary :name "qwe" :help "qwe" :value 3)))
       (prom:counter.inc rc :value 5 :labels '("ge\"t"))
       (prom:counter.inc rc :value 12 :labels '("p\\os
 t"))
@@ -20,7 +21,10 @@ t"))
       (prom:histogram.observe h 1 :labels '("html"))
       (prom:histogram.observe h 0.5 :labels '("html"))
       (prom:histogram.observe h 4.5 :labels '("pdf"))
-      (prom:summary.observe s 43.3d0)
+      (prom:summary.observe ss 43.3d0)
+      (prom:summary.observe s 5.2d0)
+      (prom:summary.observe s 13)
+      (prom:summary.observe s 4)
       (is (prom.text:marshal) "# TYPE requests_counter counter
 # HELP requests_counter Hunch\\\\entoot\\nrequests counter
 requests_counter{type=\"p\\\\os\\nt\"} 12
@@ -50,6 +54,13 @@ render_time_count{type=\"html\"} 3
 # HELP traffic_summary traffic summary
 traffic_summary_sum 55.3
 traffic_summary_count 2
+# TYPE qwe summary
+# HELP qwe qwe
+qwe{quantile=\"0.5\"} 4
+qwe{quantile=\"0.9\"} 5.2
+qwe{quantile=\"0.99\"} 5.2
+qwe_sum 25.2
+qwe_count 4
 ")
 
       (is prom.text:+content-type+ "text/plain; version=0.0.4"))))

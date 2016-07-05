@@ -28,6 +28,7 @@ install:
     fi     
         
 before_script:
+  - git clone https://github.com/deadtrickster/quantile-estimator.cl.git /home/travis/.roswell/impls/ALL/ALL/quicklisp/local-projects/quantile-estimator
   # - echo "(defsystem :dummy-cl-travis-system)" > ~/lisp/dummy-cl-travis-system.asd
 
 script:

@@ -5,7 +5,8 @@
   :depends-on ("alexandria"
                "bordeaux-threads"
                "cl-ppcre"
-               "local-time")
+               "local-time"
+               "quantile-estimator")
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
   :components ((:module "src/prometheus"
                 :serial t

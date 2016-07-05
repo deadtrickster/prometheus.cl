@@ -1,7 +1,7 @@
 (in-package #:cl-user)
 
 (defpackage #:prometheus
-  (:use #:cl #:alexandria)
+  (:use #:cl #:alexandria #:quantile-estimator)
   (:nicknames #:prom)
   (:export *default-registry*
            #:registry
@@ -44,10 +44,14 @@
            #:make-histogram
            #:histogram.observe
            #:histogram.time
+           #:simple-summary
            #:summary
+           #:simple-summary-metric
            #:summary-metric
            #:summary-count
            #:summary-sum
+           #:summary-quantiles
+           #:make-simple-summary
            #:make-summary
            #:summary.observe
            #:summary.time

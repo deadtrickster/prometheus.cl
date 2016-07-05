@@ -11,7 +11,7 @@
       (is (first req) :put)
       (is (second req) "/metrics/job/test/label/test")
       (is (third req) prom.text:+content-type+)
-      (is (fourth req) +expected-metrics-text+))))
+      (is (fourth req)  +expected-metrics-text+))))
 
 (defun test-push (address acceptor)
   (subtest "PUSH"

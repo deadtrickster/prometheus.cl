@@ -39,7 +39,7 @@
                          labels
                          (prom:metric-labels metric)
                          counter)))
-  (:method ((metric prom:summary-metric) name labels stream)
+  (:method ((metric prom:simple-summary-metric) name labels stream)
     (print-sample-line stream
                        (concatenate 'string name "_sum")
                        labels
@@ -49,7 +49,22 @@
                        (concatenate 'string name "_count")
                        labels
                        (prom:metric-labels metric)
-                       (prom:metric-value metric))))
+                       (prom:metric-value metric)))
+  (:method ((metric prom:summary-metric) name labels stream)
+    (let ((q-labels (append labels (list "quantile"))))
+      (loop for quantile in (prom:summary-quantiles metric)
+            do
+               (print-sample-line stream name q-labels (append (prom:metric-labels metric) (list (car quantile))) (cdr quantile))))
+    (print-sample-line stream
+                       (concatenate 'string name "_sum")
+                       labels
+                       (prom:metric-labels metric)
+                       (prom:summary-sum metric))
+    (print-sample-line stream
+                       (concatenate 'string name "_count")
+                       labels
+                       (prom:metric-labels metric)
+                       (prom:summary-count metric))))
 
 (defgeneric metric-family-to-text (mf stream)
   (:method ((mf prom::metric-family) stream)

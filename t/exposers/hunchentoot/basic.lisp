@@ -54,6 +54,9 @@ render_time_sum{type=\"html\"} 6.0
 render_time_count{type=\"html\"} 3
 # TYPE traffic_summary summary
 # HELP traffic_summary traffic summary
+traffic_summary{quantile=\"0.5\"} 12
+traffic_summary{quantile=\"0.9\"} 12
+traffic_summary{quantile=\"0.99\"} 12
 traffic_summary_sum 55.3
 traffic_summary_count 2
 ")
