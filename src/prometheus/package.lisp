@@ -66,6 +66,7 @@
            #:invalid-label-count-error
            #:invalid-labels-error
            #:invalid-metric-name-error
+           #:invalid-metric-help-error
            #:invalid-buckets-error
            #:invalid-bucket-bound-error
            #:collectable-already-registered-error))

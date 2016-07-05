@@ -94,10 +94,10 @@
         collect (make-quantile quantile error)))
 
 (defun default-quantiles ()
-  '#.(quantiles-from-alist
-      '((0.5d0 . 0.05d0)
-        (0.9d0 . 0.01d0)
-        (0.99d0 . 0.001d0))))
+  (quantiles-from-alist
+   '((0.5d0 . 0.05d0)
+     (0.9d0 . 0.01d0)
+     (0.99d0 . 0.001d0))))
 
 (defun normailize-quantiles (quantiles)
   (if quantiles

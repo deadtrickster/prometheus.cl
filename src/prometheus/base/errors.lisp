@@ -38,6 +38,12 @@
   (:report (lambda (error stream)
              (format stream "Metric name ~s is invalid. Reason: ~a" (slot-value error 'name) (slot-value error 'reason)))))
 
+(define-condition invalid-metric-help-error (base-error)
+  ((help :initarg :help)
+   (reason :initarg :reason))
+  (:report (lambda (error stream)
+             (format stream "Metric help ~s is invalid. Reason: ~a" (slot-value error 'help) (slot-value error 'reason)))))
+
 (define-condition invalid-buckets-error (invalid-value-error)
   ()
   (:report (lambda (error stream)

@@ -12,6 +12,10 @@
   (check-metric-name-is-string name)
   (check-metric-name-regex name))
 
+(defun check-metric-help (help)
+  (unless (stringp help)
+    (error 'invalid-metric-help-error :help help :reason "metric help is not a string")))
+
 (defclass metric-family (collectable)
   ((name :initarg :name :reader metric-family-name)
    (help :initform nil :initarg :help :reader metric-family-help)
@@ -42,9 +46,10 @@
 
 (defgeneric validate-args (mv &rest initargs &key &allow-other-keys)
   (:method-combination validator)
-  (:method ((mf metric-family) &rest initargs &key name labels &allow-other-keys)
+  (:method ((mf metric-family) &rest initargs &key name labels help &allow-other-keys)
     (declare (ignore initargs))
     (check-metric-name name)
+    (check-metric-help help)
     (check-label-names labels)
     nil))
 
@@ -67,10 +72,10 @@
 (defmethod get-metric ((mf metric-family) labels)
   (or (and (not labels)
            (metric-family-no-labels-metric mf))
-    (progn
-      (check-label-values labels (metric-family-labels mf))
-      (get-or-add-metric (metric-family-metrics mf) labels
-                         (lambda (labels) (mf-make-metric mf labels))))))
+      (progn
+        (check-label-values labels (metric-family-labels mf))
+        (get-or-add-metric (metric-family-metrics mf) labels
+                           (lambda (labels) (mf-make-metric mf labels))))))
 
 (defmethod get-metrics ((mf metric-family))
   (if-let ((nlm (metric-family-no-labels-metric mf)))
