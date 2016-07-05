@@ -6,6 +6,8 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
+NOTE: Quantile estimator system used by summary is yet to be included in Quicklisp. Please download manually: https://github.com/deadtrickster/quantile-estimator.cl
+
 ### Example Quick Start
 Currently example uses Linux and SBCL specific collectors. 
 
@@ -22,7 +24,8 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 - Int Counter (can only work with unsigned int64)
 - Gauge
 - Histogram
-- Summary (without quantiles for now)
+- Simple Summary (without quantiles)
+- Summary (with quantiles)
 
 ## Custom collectors
 
