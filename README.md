@@ -6,13 +6,11 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
-NOTE: Quantile estimator system used by summary is yet to be included in Quicklisp. Please download manually: https://github.com/deadtrickster/quantile-estimator.cl
-
 ### Example Quick Start
 Currently example uses Linux and SBCL specific collectors. 
 
 ```lisp
-(ql:quickload :prometheus.example)
+(ql:quickload :prometheus.examples)
 (prometheus.example:run)
 ```
 You can override app/exporter host/port in `prometheus.example:run` arguments. To stop example app call `prometheus.example:stop`
