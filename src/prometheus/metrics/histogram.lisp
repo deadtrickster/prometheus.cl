@@ -31,7 +31,7 @@
   (unless (equalp (sort (copy-seq buckets) #'<) buckets)
     (error 'invalid-buckets-error :value buckets :reason "bounds not sorted"))
 
-  (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+allegro excl::*infinity-double* #+lispworks #.(read-from-string "10E999") #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+  (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+allegro excl::*infinity-double* #+lispworks 1D++0 #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
     (replace with+inf buckets)
     with+inf))
 
