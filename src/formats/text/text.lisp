@@ -5,10 +5,10 @@
 (defmethod catch-strange-float (value)
   value)
 
-(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY #+lispworks +1D++0)))
   "+Inf")
 
-(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-negative-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-negative-INFINITY)))
+(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-negative-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY #+lispworks -1D++0)))
   "-Inf")
 
 (defun print-sample-line (stream name lables lvalues value)
