@@ -5,6 +5,7 @@
   :serial t
   :version "0.1"
   :licence "MIT"
+  :defsystem-depends-on ("cffi-grovel")
   :depends-on ("prometheus"
                "cl-fad"
                "split-sequence"
