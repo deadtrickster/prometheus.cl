@@ -14,9 +14,10 @@
 (defun print-sample-line (stream name lables lvalues value)
   (let ((*read-default-float-format* 'double-float))
     (format stream "~a~@[{~{~{~(~A~)=\"~A\"~}~^, ~}}~] ~a~%" name (mapcar (lambda (lname lvalue)
-                                                                            (list lname (if (stringp lvalue)
-                                                                                            (escape-label-value lvalue)
-                                                                                            lvalue))) lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
+                                                                            (list lname (cond
+                                                                                          ((stringp lvalue) (escape-label-value lvalue))
+                                                                                          ((floatp lvalue) (format nil "~F" lvalue))
+                                                                                          (t lvalue)))) lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
 
 (defgeneric metric-to-text (metric name family-lables stream)
   (:method ((metric prom:simple-metric) name family-lables stream)
