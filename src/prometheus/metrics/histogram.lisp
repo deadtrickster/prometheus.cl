@@ -16,6 +16,13 @@
   ((buckets :initarg :buckets :reader histogram-buckets))
   (:default-initargs :type "histogram"))
 
+(defun normalize-bucket-bound (bound)
+  ;; 0.005f0 -> 0.005d0, the value the caller wrote. Coercing directly gives
+  ;; 0.004999999888241291d0, which misfiles observations of exactly 0.005d0.
+  (if (and (floatp bound) (not (typep bound 'double-float)))
+      (coerce (rationalize bound) 'double-float)
+      bound))
+
 (defun validate-and-normalize-buckets (buckets)
   (unless (listp buckets)
     (error 'invalid-buckets-error :value buckets :reason "expected LIST"))
@@ -32,7 +39,7 @@
     (error 'invalid-buckets-error :value buckets :reason "bounds not sorted"))
 
   (let ((with+inf (make-array (1+ (length buckets)) :element-type 'number :initial-element #+allegro excl::*infinity-double* #+lispworks 1D++0 #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
-    (replace with+inf buckets)
+    (replace with+inf (mapcar #'normalize-bucket-bound buckets))
     with+inf))
 
 (defmethod validate-args ((mf histogram) &rest initargs &key labels buckets &allow-other-keys)

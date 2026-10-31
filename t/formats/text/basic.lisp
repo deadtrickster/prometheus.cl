@@ -1,6 +1,6 @@
 (in-package #:prometheus.formats.text.test)
 
-(plan 1)
+(plan 2)
 
 (subtest "Basic test"
   (with-fresh-registry
@@ -64,5 +64,12 @@ qwe_count 4
 ")
 
       (is prom.text:+content-type+ "text/plain; version=0.0.4"))))
+
+(subtest "Single-float bucket bounds"
+  (with-fresh-registry
+    (let ((h (prom:make-histogram :name "probe_seconds" :help "probe" :buckets '(0.005 0.01))))
+      (prom:histogram.observe h 0.005d0)
+      (ok (search (format nil "probe_seconds_bucket{le=\"0.005\"} 1~%probe_seconds_bucket{le=\"0.01\"} 1~%")
+                  (prometheus.formats.text:marshal))))))
 
 (finalize)
