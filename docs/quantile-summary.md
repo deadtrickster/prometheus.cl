@@ -26,7 +26,9 @@ What that guarantees:
 - extrema are written before the count, so a counted observation always has real extrema (an empty sketch holds placeholders: min is the largest double, max is 0)
 - a merge from a sketch that is still being written reads each bucket in one step, and may leave out observations that land during the merge
 
-Counts are doubles, exact up to 2^53, so the whole array is uniform and merging shards is plain double addition, ready for SIMD (#24). Guards of one cache line (measured at load) keep other objects off the lines being written.
+Counts are doubles, exact up to 2^53, so the whole array is uniform and a pair is two lanes of one SSE register. Guards of one cache line (measured at load) keep other objects off the lines being written.
+
+Reads merge the shards into a buffer the sharded sketch owns, one pair at a time: `movdqa` from the shard, `addpd` into the buffer, `movdqa` back, the same three instructions for every bucket. Intel (SDM 9.1.1) and AMD (APM 7.3.2) guarantee an aligned 16-byte `movdqa` is atomic on CPUs with AVX, so each pair is read in one step. On CPUs without AVX the merge reads pairs with the CAS instead. 32-byte loads have no such guarantee, which is why the merge stays at 16 bytes. Quantiles then walk the one buffer; a snapshot merges straight into the target.
 
 ## Memory
 
@@ -46,13 +48,13 @@ Observations must be finite and non-negative. Sums are doubles.
 
 A writer uses the shard of the CPU it runs on (`sched_getcpu`), and shards are combined on read, like prometheus.erl's per-scheduler rows. Writes stay atomic since a thread can be preempted or migrated mid-update (#20). On SBCL off Linux the shard is `os-tid mod shards`. Elsewhere than SBCL there is one locked sketch.
 
-`sharded-ddsketch-observe`, spread values, shared 4-CPU VM (so 4 shards), median of 3, million ops/s:
+`sharded-ddsketch-observe`, spread values, shared 4-CPU VM (so 4 shards), million ops/s:
 
 | threads | SBCL 2.2.9 | SBCL 2.6.10 |
 |---|---|---|
-| 1 | 15.6 | 12.8 |
-| 4 | 50.0 | 50.0 |
-| 8 | 50.0 | 50.0 |
-| 32 | 50.0 | 45.5 |
+| 1 | 16.4 | 13.3-13.7 |
+| 4 | 37.0-45.5 | 38.5 |
+| 8 | 38.5-50.0 | 41.7-47.6 |
+| 32 | 50.0 | 43.5-47.6 |
 
-Reading three quantiles over 4 shards takes about 40us, a snapshot into a reused sketch about 53us.
+Reading three quantiles over 4 shards takes 20-30us, a snapshot into a reused sketch 10-16us.
