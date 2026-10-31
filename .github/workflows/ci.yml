@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lisp: sbcl
+            cmd: sbcl --non-interactive
+          - lisp: ccl
+            cmd: lx86cl64 --batch
+    name: ${{ matrix.lisp }}
+    env:
+      LISP: ${{ matrix.cmd }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL
+        if: matrix.lisp == 'sbcl'
+        run: sudo apt-get update && sudo apt-get install -y sbcl
+
+      - name: Install CCL
+        if: matrix.lisp == 'ccl'
+        run: |
+          curl -sSL https://github.com/Clozure/ccl/releases/download/v1.14/ccl-1.14-linuxx86.tar.gz | tar xz -C "$HOME"
+          echo "$HOME/ccl" >> "$GITHUB_PATH"
+
+      - name: Install Quicklisp
+        run: |
+          curl -sSLO https://beta.quicklisp.org/quicklisp.lisp
+          $LISP --load quicklisp.lisp --eval '(quicklisp-quickstart:install)' < /dev/null
+          git clone --depth 1 https://github.com/deadtrickster/quantile-estimator.cl "$HOME/quicklisp/local-projects/quantile-estimator"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/quicklisp/local-projects/prometheus.cl"
+
+      - name: Test
+        run: |
+          $LISP --load "$HOME/quicklisp/setup.lisp" \
+                --eval '(ql:quickload :prometheus.test.all)' \
+                --eval '(prometheus.test.all:run :ci t)' < /dev/null
