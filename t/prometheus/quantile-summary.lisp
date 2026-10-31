@@ -1,6 +1,6 @@
 (in-package :prometheus.test)
 
-(plan #+sbcl 5 #-sbcl 4)
+(plan #+sbcl 6 #-sbcl 5)
 
 (defun within-relative-error-p (estimate exact alpha)
   (<= (abs (- estimate exact)) (* alpha exact (+ 1 1d-9))))
@@ -157,6 +157,33 @@
           "with-quantile-summary-estimates")
       (is (consed (lambda () (dotimes (r 50) (prom:sharded-ddsketch-snapshot sharded target)))) 0
           "snapshot into a reused sketch"))))
+
+(subtest "Span-limited reads match a full merge"
+  ;; four standalone sketches, so this runs where only one shard is made
+  (let ((shards (vector (prom:make-ddsketch) (prom:make-ddsketch)
+                        (prom:make-ddsketch) (prom:make-ddsketch))))
+    ;; different, partly disjoint ranges; the last stays empty
+    (loop for v from 1 to 2000 do (prom:ddsketch-observe (svref shards 0) (* v 1d-3)))
+    (loop for v from 1 to 2000 do (prom:ddsketch-observe (svref shards 1) (* v 7d0)))
+    (loop for v from 1 to 500 do (prom:ddsketch-observe (svref shards 2) (expt 1.01d0 v)))
+    (prom:ddsketch-observe (svref shards 2) 0)
+    (prom:ddsketch-observe (svref shards 2) 1d12)
+    (let ((full (prom:ddsketch-empty-copy (svref shards 0)))
+          (span (prom:ddsketch-empty-copy (svref shards 0)))
+          (qs (make-array 7 :element-type 'double-float
+                            :initial-contents '(0d0 0.001d0 0.1d0 0.5d0 0.9d0 0.999d0 1d0)))
+          (span-out (make-array 7 :element-type 'double-float))
+          (full-out (make-array 7 :element-type 'double-float)))
+      ;; ddsketch-merge walks every bucket
+      (loop for shard across shards do (prom:ddsketch-merge full shard))
+      (multiple-value-bind (data from to) (prom::%merge-shards-into shards (prom::ddsketch-data span))
+        (declare (ignore data))
+        (is (prom:ddsketch-count span) (prom:ddsketch-count full))
+        (is (prom:ddsketch-sum span) (prom:ddsketch-sum full))
+        (ok (equalp (prom::ddsketch-data span) (prom::ddsketch-data full)) "same buckets")
+        (prom::%quantiles-from-data span (prom::ddsketch-data span) qs span-out from to)
+        (prom:ddsketch-quantiles-into full qs full-out)
+        (is span-out full-out "same quantiles" :test #'equalp)))))
 
 (subtest "Consistency under concurrency"
   (subtest "A counted observation has its extrema"

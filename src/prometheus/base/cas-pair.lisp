@@ -26,7 +26,7 @@
            (n2 :scs (sb-vm::unsigned-reg) :target rcx))
     (:arg-types * sb-vm::unsigned-num sb-vm::unsigned-num sb-vm::unsigned-num
                 sb-vm::unsigned-num sb-vm::unsigned-num)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from (:argument 0)) rsi)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from :load) rsi)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rax-offset :from (:argument 2) :to (:result 0)) rax)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rdx-offset :from (:argument 3) :to (:result 1)) rdx)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rbx-offset :from (:argument 4)) rbx)
@@ -59,7 +59,7 @@
     (:args (v :scs (sb-vm::descriptor-reg))
            (i :scs (sb-vm::unsigned-reg)))
     (:arg-types * sb-vm::unsigned-num)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from (:argument 0)) rsi)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from :load) rsi)
     (:temporary (:sc sb-vm::double-reg :offset 15 :to (:result 1)) xmm15)
     (:temporary (:sc sb-vm::double-reg :offset 14 :to (:result 1)) xmm14)
     (:results (r1 :scs (sb-vm::double-reg)) (r2 :scs (sb-vm::double-reg)))
@@ -90,8 +90,8 @@
            (src :scs (sb-vm::descriptor-reg))
            (si :scs (sb-vm::unsigned-reg)))
     (:arg-types * sb-vm::unsigned-num * sb-vm::unsigned-num)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from (:argument 0)) rsi)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rdi-offset :from (:argument 0)) rdi)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from :load) rsi)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rdi-offset :from :load) rdi)
     (:temporary (:sc sb-vm::double-reg :offset 15) xmm15)
     (:generator 4
       xmm15
