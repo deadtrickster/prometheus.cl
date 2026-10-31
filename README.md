@@ -1,4 +1,6 @@
-# Prometheus.io Common Lisp Client [![Build Status](https://travis-ci.org/deadtrickster/prometheus.cl.svg?branch=master)](https://travis-ci.org/deadtrickster/prometheus.cl) [![Coverage Status](https://coveralls.io/repos/github/deadtrickster/prometheus.cl/badge.svg?branch=master)](https://coveralls.io/github/deadtrickster/prometheus.cl?branch=master)
+# Prometheus.io Common Lisp Client [![CI](https://github.com/deadtrickster/prometheus.cl/actions/workflows/ci.yml/badge.svg)](https://github.com/deadtrickster/prometheus.cl/actions/workflows/ci.yml)
+
+Tested on SBCL and CCL.
 
 Example Grafana dashboard for Hunchentoot on SBCL:
 
@@ -7,7 +9,7 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
 ### Example Quick Start
-Currently example uses Linux and SBCL specific collectors. 
+Example uses the Linux process collector, plus the SBCL collectors on SBCL. 
 
 ```lisp
 (ql:quickload :prometheus.examples)
@@ -24,7 +26,7 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 - Histogram
 - Simple Summary (without quantiles)
 - Summary (with quantiles, CKMS via quantile-estimator)
-- Quantile Summary (DDSketch: relative-error quantiles, mergeable across series, sharded per thread and lock-free on SBCL; port of prometheus.erl's `prometheus_quantile_summary`)
+- Quantile Summary (DDSketch: relative-error quantiles, mergeable across series, sharded per CPU; port of prometheus.erl's `prometheus_quantile_summary`)
 
 ## Custom collectors
 
