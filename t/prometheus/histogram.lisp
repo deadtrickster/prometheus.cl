@@ -31,6 +31,13 @@
       (prom:histogram.observe h 12)
       (is-histogram-stat nlm 2 1 1 1)))
 
+  (subtest "Single-float bounds"
+    (let* ((h (prom:make-histogram :name "qwe" :help "" :buckets '(0.005 0.01) :registry nil))
+           (nlm (prom:get-metric h nil)))
+      (is (prom:bucket-bound (aref (prom:histogram-buckets nlm) 0)) 0.005d0)
+      (prom:histogram.observe h 0.005d0)
+      (is-histogram-stat nlm 1 0 0)))
+
   (subtest "TIME"
     (let* ((c (prom:make-histogram :name "qwe" :help "" :buckets '(1 2) :registry nil))
            (nlm (prom:get-metric c nil)))
