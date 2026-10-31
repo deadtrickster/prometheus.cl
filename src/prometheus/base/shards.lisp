@@ -213,6 +213,7 @@ evaluated with OLD bound to the current double, as long as WHEN holds."
   #+sbcl (%w->d (counter-cell-double-bits cell))
   #-sbcl (counter-cell-double cell))
 
+(declaim (inline counter-cells-add))
 (defun counter-cells-add (cells n)
   "Add non-negative real N to the calling thread's cell. Allocates nothing
 for fixnums and doubles. Elsewhere than SBCL the caller holds a lock."
