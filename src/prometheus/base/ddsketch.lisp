@@ -295,6 +295,8 @@ MIN is then the largest double and MAX 0."
         (values (max 0 (1- (%sketch-index sketch (max 0d0 min))))
                 (min last (1+ (%sketch-index sketch (max 0d0 max))))))))
 
+;; inline: count and sum come back as doubles, a full call would box them
+(declaim (inline %quantiles-from-data))
 (defun %quantiles-from-data (proto data qs out
                              &optional (from 0) (to (1- (ddsketch-buckets proto))))
   "Write into OUT the quantiles QS (ascending) of DATA, an array laid out like
@@ -342,6 +344,7 @@ and the sum, all from the same pass over DATA."
             do (setf (aref out qi) max) (incf qi))
       (values t total sum))))
 
+(declaim (inline %sketch-quantiles-into))
 (defun %sketch-quantiles-into (sketch qs out)
   ;; extrema first, then the buckets they span
   (multiple-value-bind (lo hi) (%observed-span sketch (%sketch-min sketch) (%sketch-max sketch))
@@ -353,7 +356,8 @@ and the sum, all from the same pass over DATA."
 [0, 1]) of SKETCH into OUT, a double-float array of the same length. Returns
 NIL and leaves OUT alone when SKETCH is empty. Allocates nothing."
   (check-quantile-buffers qs out)
-  (%sketch-quantiles-into sketch qs out))
+  ;; first value only: count and sum would come back boxed
+  (values (%sketch-quantiles-into sketch qs out)))
 
 (defun ddsketch-quantile (sketch q)
   "Estimate the Q-quantile, 0 <= Q <= 1. Returns NIL for an empty sketch.
@@ -502,20 +506,30 @@ min only falls and max only rises. Buckets outside are exactly zero."
     (ddsketch-observe (svref shards (%current-shard-index (1- (length shards)))) value))
   sketch)
 
-(defun %sharded-quantiles-into (sketch qs out)
-  (declare (type sharded-ddsketch sketch))
-  (bt:with-lock-held ((sharded-ddsketch-lock sketch))
-    (let ((shards (sharded-ddsketch-shards sketch)))
-      (multiple-value-bind (data from to)
-          (%merge-shards-into shards (sharded-ddsketch-merged sketch))
-        (if (<= from to)
-            (%quantiles-from-data (svref shards 0) data qs out from to)
-            (values nil 0d0 0d0))))))
+(defmacro %with-sharded-read ((observed count sum) (sketch qs out) &body body)
+  "Merge SKETCH's shards and walk them for QS into OUT, then run BODY with
+OBSERVED, COUNT (a double) and SUM bound, all from that one read, inside the
+read lock. Values never leave the locked region, so nothing is boxed."
+  (let ((s (gensym "SKETCH")) (shards (gensym "SHARDS")) (data (gensym "DATA"))
+        (from (gensym "FROM")) (to (gensym "TO")))
+    `(let ((,s ,sketch))
+       (bt:with-lock-held ((sharded-ddsketch-lock ,s))
+         (let ((,shards (sharded-ddsketch-shards ,s)))
+           (multiple-value-bind (,data ,from ,to)
+               (%merge-shards-into ,shards (sharded-ddsketch-merged ,s))
+             (declare (type fixnum ,from ,to))
+             (multiple-value-bind (,observed ,count ,sum)
+                 (if (<= ,from ,to)
+                     (%quantiles-from-data (svref ,shards 0) ,data ,qs ,out ,from ,to)
+                     (values nil 0d0 0d0))
+               (declare (ignorable ,observed ,count ,sum))
+               ,@body)))))))
 
 (defun sharded-ddsketch-quantiles-into (sketch qs out)
   "DDSKETCH-QUANTILES-INTO over all shards, merged into the sketch's buffer."
   (check-quantile-buffers qs out)
-  (%sharded-quantiles-into sketch qs out))
+  (%with-sharded-read (observed count sum) (sketch qs out)
+    observed))
 
 (defun sharded-ddsketch-quantile (sketch q)
   (unless (and (realp q) (<= 0 q 1))
@@ -523,8 +537,8 @@ min only falls and max only rises. Buckets outside are exactly zero."
   (let ((qs (make-array 1 :element-type 'double-float :initial-element (coerce q 'double-float)))
         (out (make-array 1 :element-type 'double-float :initial-element 0d0)))
     (declare (dynamic-extent qs out))
-    (when (%sharded-quantiles-into sketch qs out)
-      (aref out 0))))
+    (%with-sharded-read (observed count sum) (sketch qs out)
+      (when observed (aref out 0)))))
 
 (defun sharded-ddsketch-count (sketch)
   (%count->integer

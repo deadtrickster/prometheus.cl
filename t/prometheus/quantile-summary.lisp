@@ -151,11 +151,11 @@
           "sharded-ddsketch-observe")
       (is (consed (lambda () (dotimes (r 100) (loop for v across values do (prom:summary.observe metric v))))) 0
           "summary.observe on a series")
-      (is (consed (lambda () (dotimes (r 50) (prom:sharded-ddsketch-quantiles-into sharded qs out)))) 0
+      (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-quantiles-into sharded qs out)))) 0
           "sharded-ddsketch-quantiles-into")
-      (is (consed (lambda () (dotimes (r 50) (prom:with-quantile-summary-estimates (q e) metric (aref e 0) (aref q 0))))) 0
+      (is (consed (lambda () (dotimes (r 5000) (prom:with-quantile-summary-estimates (q e) metric (> (aref e 0) (aref q 0)))))) 0
           "with-quantile-summary-estimates")
-      (is (consed (lambda () (dotimes (r 50) (prom:sharded-ddsketch-snapshot sharded target)))) 0
+      (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-snapshot sharded target)))) 0
           "snapshot into a reused sketch"))))
 
 (subtest "Span-limited reads match a full merge"

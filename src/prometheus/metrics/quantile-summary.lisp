@@ -79,9 +79,10 @@ Allocates nothing; meant for exposition code."
        (synchronize ,m
          (let ((,quantiles (quantile-summary-metric-quantiles ,m))
                (,estimates (quantile-summary-metric-estimates ,m)))
-           (multiple-value-bind (observed ,total ,sum)
-               (%sharded-quantiles-into (quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
-             (declare (ignore observed))
+           ;; typed, so the body's AREFs are not generic calls
+           (declare (type quantile-buffer ,quantiles ,estimates))
+           (%with-sharded-read (,(gensym "OBSERVED") ,total ,sum)
+               ((quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
              (let ((,count (%count->integer ,total)))
                ,@body)))))))
 
