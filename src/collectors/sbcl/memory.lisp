@@ -1,12 +1,18 @@
 (in-package #:prometheus.sbcl)
 
 (defclass memory-collector (prom:collector)
-  ((cutoff :initarg :cutoff :reader memory-collector-cutoff)))
+  ((cutoff :initarg :cutoff :reader memory-collector-cutoff)
+   (type-breakdown :initarg :type-breakdown :initform nil :reader memory-collector-type-breakdown)))
 
-(defun make-memory-collector (&key (namespace "") (cutoff 0.05f0) (name "sbcl_memory_collector") (registry prom:*default-registry*))
+(defun make-memory-collector (&key (namespace "") (cutoff 0.05f0) (name "sbcl_memory_collector")
+                                (type-breakdown nil) (registry prom:*default-registry*))
+  "Collect SBCL heap usage. TYPE-BREAKDOWN adds per-type bytes and objects.
+It walks the heap with SB-VM::TYPE-BREAKDOWN, which can hang SBCL when
+another heap walk runs at the same time."
   (let ((collector (make-instance 'memory-collector :namespace namespace
                                                     :name name
-                                                    :cutoff cutoff)))
+                                                    :cutoff cutoff
+                                                    :type-breakdown type-breakdown)))
     (when registry
       (prom:register collector registry))
     collector))
@@ -23,6 +29,14 @@
                                :help "SBCL Static space usage"
                                :value (sb-kernel::static-space-usage)
                                :registry nil))
+  (funcall cb (prom:make-gauge :name (prom:collector-metric-name mc "sbcl_dynamic_usage_bytes")
+                               :help "SBCL Dynamic space usage"
+                               :value (sb-kernel:dynamic-usage)
+                               :registry nil))
+  (when (memory-collector-type-breakdown mc)
+    (collect-type-breakdown mc cb)))
+
+(defun collect-type-breakdown (mc cb)
   (let ((bytes-gauge (prom:make-gauge :name (prom:collector-metric-name mc "sbcl_dynamic_bytes")
                                       :help "SBCL Dynamic space usage"
                                       :labels '("object_type")
