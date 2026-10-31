@@ -27,6 +27,20 @@
 (pushnew (lambda () (setf *detected-shards* (round-up-shards (detect-cpu-count))))
          sb-ext:*init-hooks*)
 
+(defun detect-cache-line-bytes ()
+  "L1 data cache line size, 64 when it cannot be read."
+  (let ((n (or (ignore-errors
+                (with-open-file (in "/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size")
+                  (parse-integer (read-line in))))
+               64)))
+    (if (and (<= 16 n 1024) (= 1 (logcount n))) n 64)))
+
+(defvar *cache-line-bytes* (detect-cache-line-bytes))
+
+#+sbcl
+(pushnew (lambda () (setf *cache-line-bytes* (detect-cache-line-bytes)))
+         sb-ext:*init-hooks*)
+
 (defvar *default-shards* nil
   "Shards per series for sharded metrics, a power of two in [1, 1024].
 NIL means one per configured CPU, rounded up to a power of two.")

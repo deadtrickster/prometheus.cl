@@ -18,6 +18,7 @@
                   ((:file "errors")
                    (:file "cas")
                    (:file "shards")
+                   (:file "cas-pair")
                    (:file "ddsketch")
                    (:file "synchronizable")
                    (:file "collectable")

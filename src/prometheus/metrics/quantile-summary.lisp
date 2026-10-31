@@ -28,8 +28,9 @@
 
 (defmethod validate-args ((mf quantile-summary) &rest initargs &key labels quantiles &allow-other-keys)
   (declare (ignore initargs))
-  (when (find "quantile" labels :test #'equal)
-    (error 'invalid-label-name-error :name "quantile" :reason "summary cannot have a label named \"quantile\""))
+  ;; any case: the text format lowercases label names
+  (when-let ((label (find "quantile" labels :test #'string-equal)))
+    (error 'invalid-label-name-error :name label :reason "summary cannot have a label named \"quantile\""))
   (list :quantiles (normalize-sketch-quantiles quantiles)))
 
 (defclass quantile-summary-metric (metric)
@@ -52,9 +53,11 @@
 
 (defmethod summary.observe% ((summary quantile-summary-metric) value count labels)
   (declare (ignore labels))
-  (let ((sketch (quantile-summary-sharded-sketch summary)))
-    (dotimes (i count)
-      (sharded-ddsketch-observe sketch value))))
+  ;; a simple summary takes COUNT pre-aggregated observations summing to
+  ;; VALUE; a sketch cannot place those in buckets
+  (unless (eql count 1)
+    (error 'invalid-value-error :value count :reason "quantile summary observes one value at a time, count should be 1"))
+  (sharded-ddsketch-observe (quantile-summary-sharded-sketch summary) value))
 
 (defmethod summary-count ((summary quantile-summary-metric))
   (sharded-ddsketch-count (quantile-summary-sharded-sketch summary)))
@@ -104,10 +107,13 @@ a DDSketch: within RELATIVE-ERROR of the true value for observations in
 [MIN-VALUE, MAX-VALUE].  Observations must be non-negative.
 
 Each series has SHARDS sketches (default one per CPU), combined at scrape
-time and all allocated with the series: about 17KB each with the default
+time and all allocated with the series: about 34KB each with the default
 range and error."
   (check-value-or-labels value labels)
   (check-ddsketch-parameters relative-error min-value max-value shards)
+  ;; before registering, so a bad value does not leave the name taken
+  (when (and value (not (and (realp value) (<= 0 value most-positive-double-float))))
+    (%bad-sketch-value value))
   (let ((summary (make-instance 'quantile-summary :name name
                                                   :help help
                                                   :labels labels

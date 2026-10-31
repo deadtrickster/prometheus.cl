@@ -10,28 +10,49 @@ Difference from ddskerl - ddskerl indexes only values above 1 and puts all of `(
 
 Sketches with the same parameters merge by adding counters, with the same error bound as one sketch that saw every value. CKMS (`make-summary`) cannot do this.
 
+## Layout and atomicity
+
+A sketch is one double-float array:
+
+```
+[ guard | min max | count0 sum0 | count1 sum1 | ... | guard ]
+```
+
+Each `[count sum]` and `[min max]` is a 16-byte pair. On x86-64 SBCL an observe updates `min max` and then its bucket's `count sum`, each with one `lock cmpxchg16b` (`base/cas-pair.lisp`, a VOP since SBCL only has a pair CAS for `simple-vector`). Elsewhere the same array is updated under a lock.
+
+What that guarantees:
+
+- a bucket's count and sum change together, so a read or merge never sees one without the other
+- extrema are written before the count, so a counted observation always has real extrema (an empty sketch holds placeholders: min is the largest double, max is 0)
+- a merge from a sketch that is still being written reads each bucket in one step, and may leave out observations that land during the merge
+
+Counts are doubles, exact up to 2^53, so the whole array is uniform and merging shards is plain double addition, ready for SIMD (#24). Guards of one cache line (measured at load) keep other objects off the lines being written.
+
 ## Memory
 
-Fixed at creation. With the defaults a sketch is about 2100 words (17KB). A series has `shards` sketches, all allocated with the series. The default is one per configured CPU rounded up to a power of two, so about 70KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range.
+Fixed at creation. With the defaults a sketch is about 2100 buckets, two doubles each, so 34KB. A series has `shards` sketches, all allocated with the series. The default is one per configured CPU rounded up to a power of two, so about 135KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range. Parameters are limited to 65536 buckets per sketch.
 
 Nothing is allocated on the hot paths:
 
-- Observe - `atomic-incf` on the counter word. Sum, min and max are raw double bits in word slots, updated by CAS. No boxed doubles.
+- Observe - two 16-byte CAS, no boxed doubles
 - Read - quantiles are computed in one pass over all shards, written into caller buffers (`ddsketch-quantiles-into`, `sharded-ddsketch-quantiles-into`). Each series owns a scrape buffer used by `with-quantile-summary-estimates`.
 - Merge - `ddsketch-reset` makes any sketch a reusable target. `sharded-ddsketch-snapshot` and `quantile-summary-merged-sketch` take `:into`.
 
 The tests check zero bytes consed on these paths.
 
-Sums and extremes are doubles. Integer observations are exact up to 2^53. Observations must be finite and non-negative.
+Observations must be finite and non-negative. Sums are doubles.
 
 ## Sharding
 
 A writer uses the shard of the CPU it runs on (`sched_getcpu`), and shards are combined on read, like prometheus.erl's per-scheduler rows. Writes stay atomic since a thread can be preempted or migrated mid-update (#20). On SBCL off Linux the shard is `os-tid mod shards`. Elsewhere than SBCL there is one locked sketch.
 
-`summary.observe` through the API, SBCL 2.6.10, shared 4-CPU VM (so 4 shards), median of 3, million ops/s:
+`sharded-ddsketch-observe`, spread values, shared 4-CPU VM (so 4 shards), median of 3, million ops/s:
 
-| threads | 1 shard | 4 shards |
+| threads | SBCL 2.2.9 | SBCL 2.6.10 |
 |---|---|---|
-| 1 | 7.3 | 6.9 |
-| 4 | 5.7 | 12.7 |
-| 8 | 5.8 | 13.7 |
+| 1 | 15.6 | 12.8 |
+| 4 | 50.0 | 50.0 |
+| 8 | 50.0 | 50.0 |
+| 32 | 50.0 | 45.5 |
+
+Reading three quantiles over 4 shards takes about 40us, a snapshot into a reused sketch about 53us.

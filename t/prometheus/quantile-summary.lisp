@@ -1,6 +1,6 @@
 (in-package :prometheus.test)
 
-(plan 4)
+(plan #+sbcl 5 #-sbcl 4)
 
 (defun within-relative-error-p (estimate exact alpha)
   (<= (abs (- estimate exact)) (* alpha exact (+ 1 1d-9))))
@@ -19,6 +19,17 @@
                      "Value -1 is invalid. Reason: value should be a finite non-negative real number")
     (is-error-report (prom:ddsketch-quantile (prom:make-ddsketch) 2) prom:invalid-value-error
                      "Value 2 is invalid. Reason: quantile should be in [0, 1]"))
+
+  (subtest "Parameter limits"
+    (is-error (prom:make-ddsketch :relative-error 1d-20) prom:invalid-value-error
+              "gamma rounds to 1")
+    (is-error (prom:make-ddsketch :relative-error 1d-6) prom:invalid-value-error
+              "too many buckets")
+    ;; few buckets but keys far from zero: observing must not hit a type error
+    (let ((s (prom:make-ddsketch :relative-error 1d-8 :min-value 1d-9 :max-value 1.00001d-9)))
+      (prom:ddsketch-observe s 1d-9)
+      (prom:ddsketch-observe s 1.000005d-9)
+      (is (prom:ddsketch-count s) 2)))
 
   (subtest "Empty"
     (let ((s (prom:make-ddsketch)))
@@ -73,6 +84,10 @@
       ;; inputs untouched
       (is (prom:ddsketch-count a) 1000))
     (is-error (prom:ddsketch-merge (prom:make-ddsketch) (prom:make-ddsketch :relative-error 0.02d0))
+              prom:invalid-value-error)
+    ;; same gamma and first key, different underflow meaning
+    (is-error (prom:ddsketch-merge (prom:make-ddsketch :min-value 1.00001d0 :max-value 100)
+                                   (prom:make-ddsketch :min-value 1.02d0 :max-value 100))
               prom:invalid-value-error))
 
   (subtest "Concurrent observe"
@@ -143,6 +158,34 @@
       (is (consed (lambda () (dotimes (r 50) (prom:sharded-ddsketch-snapshot sharded target)))) 0
           "snapshot into a reused sketch"))))
 
+(subtest "Consistency under concurrency"
+  (subtest "A counted observation has its extrema"
+    (let ((bad 0))
+      (dotimes (i 300)
+        (let* ((s (prom:make-ddsketch))
+               (writer (bt:make-thread (lambda () (prom:ddsketch-observe s 5d0)))))
+          (loop for alive = (bt:thread-alive-p writer)
+                for q = (prom:ddsketch-quantile s 0.5d0)
+                when (and q (/= q 5d0)) do (incf bad)
+                while alive)
+          (bt:join-thread writer)))
+      (is bad 0)))
+
+  (subtest "A snapshot never splits count from sum"
+    (let* ((s (prom:make-sharded-ddsketch))
+           (stop nil)
+           (writers (loop repeat 4
+                          collect (bt:make-thread (lambda () (loop until stop do (prom:sharded-ddsketch-observe s 2d0))))))
+           (target (prom:ddsketch-empty-copy (svref (prom::sharded-ddsketch-shards s) 0)))
+           (bad 0))
+      (dotimes (i 200)
+        (prom:sharded-ddsketch-snapshot s target)
+        (unless (= (prom:ddsketch-sum target) (* 2d0 (prom:ddsketch-count target)))
+          (incf bad)))
+      (setf stop t)
+      (mapc #'bt:join-thread writers)
+      (is bad 0))))
+
 (subtest "Quantile Summary"
   (subtest "Errors & Validations"
     (is-error-report (prom:make-quantile-summary :name "qwe" :help "" :labels '("quantile") :registry nil)
@@ -151,6 +194,13 @@
     (is-error-report (prom:make-quantile-summary :name "qwe" :help "" :quantiles '(1.5) :registry nil)
                      prom:invalid-value-error
                      "Value 1.5 is invalid. Reason: quantile should be in [0, 1]")
+    (is-error (prom:make-quantile-summary :name "qwe" :help "" :labels '("Quantile") :registry nil)
+              prom:invalid-label-name-error)
+    (is-error (prom:summary.observe (prom:make-quantile-summary :name "qwe" :help "" :registry nil) 12 :count 2)
+              prom:invalid-value-error)
+    (with-fresh-registry
+      (is-error (prom:make-quantile-summary :name "qwe" :help "" :value -1) prom:invalid-value-error)
+      (ok (prom:make-quantile-summary :name "qwe" :help "" :value 1) "name not taken by the failed attempt"))
     (is-error-report (prom:summary.observe (prom:make-quantile-summary :name "qwe" :help "" :registry nil) -1)
                      prom:invalid-value-error
                      "Value -1 is invalid. Reason: value should be a finite non-negative real number"))
