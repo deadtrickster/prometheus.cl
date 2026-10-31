@@ -4,20 +4,8 @@
 ;;; adding counters. Fixed memory, no allocation on observe or read.
 ;;; Design notes: docs/quantile-summary.md.
 
-(deftype counter-word () #+sbcl 'sb-ext:word #-sbcl '(unsigned-byte 64))
 (deftype sketch-counts () '(simple-array counter-word (*)))
 (deftype quantile-buffer () '(simple-array double-float (*)))
-
-#+sbcl
-(progn
-  (declaim (inline %d->w %w->d))
-  (defun %d->w (d)
-    (declare (double-float d))
-    (ldb (byte 64 0) (sb-kernel:double-float-bits d)))
-  (defun %w->d (w)
-    (declare (type sb-ext:word w))
-    (sb-kernel:make-double-float (- (ldb (byte 32 32) w) (if (logbitp 63 w) (ash 1 32) 0))
-                                 (ldb (byte 32 0) w))))
 
 (defstruct (ddsketch (:constructor %make-ddsketch)
                      (:copier nil))
@@ -74,8 +62,7 @@ target; not atomic with respect to concurrent observations."
   (unless (and (realp min-value) (realp max-value) (< 1d-300 min-value max-value 1d300))
     (error 'invalid-value-error :value (cons min-value max-value)
                                 :reason "expected 1d-300 < min-value < max-value < 1d300"))
-  (unless (and (typep shards '(integer 1 1024)) (= 1 (logcount shards)))
-    (error 'invalid-value-error :value shards :reason "shards should be a power of two in [1, 1024]")))
+  (check-shards shards))
 
 (defun make-ddsketch (&key (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9))
   "Create an empty sketch.  Quantile estimates for values within
@@ -117,19 +104,6 @@ fixed at creation: about log(MAX-VALUE/MIN-VALUE) / (2 RELATIVE-ERROR) words,
              (declare (type (double-float -1d8 1d8) x))
              (min (1- last)
                   (max 1 (1+ (- (ceiling x) (ddsketch-min-key sketch))))))))))
-
-#+sbcl
-(defmacro %cas-double-bits ((old accessor sketch) new-form &key (when t))
-  "Replace the double stored as bits in (ACCESSOR SKETCH) with NEW-FORM,
-evaluated with OLD bound to the current double, as long as WHEN holds."
-  (let ((bits (gensym "BITS")))
-    `(loop
-       (let* ((,bits (,accessor ,sketch))
-              (,old (%w->d ,bits)))
-         (declare (ignorable ,old))
-         (unless ,when (return))
-         (when (= ,bits (sb-ext:compare-and-swap (,accessor ,sketch) ,bits (%d->w ,new-form)))
-           (return))))))
 
 (declaim (inline %sketch-add))
 (defun %sketch-add (sketch index count sum min max)
@@ -312,14 +286,14 @@ To reuse a buffer instead, DDSKETCH-RESET a sketch and DDSKETCH-MERGE into it."
     (dolist (s more result)
       (ddsketch-merge result s))))
 
-;;; One sketch per thread hash, combined on read. Avoids cache-line contention
-;;; on counters, sum and extremes.
+;;; One sketch per CPU, combined on read. Avoids cache-line contention on
+;;; counters, sum and extremes.
 
 (defstruct (sharded-ddsketch (:constructor %make-sharded-ddsketch)
                              (:copier nil))
   (shards #() :type simple-vector :read-only t))
 
-(defun make-sharded-ddsketch (&key (shards 16) (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9))
+(defun make-sharded-ddsketch (&key (shards (default-shards)) (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9))
   "Like MAKE-DDSKETCH, spread over SHARDS (a power of two) sub-sketches, all
 allocated now.  Only SBCL shards; elsewhere one locked sketch is used."
   (check-ddsketch-parameters relative-error min-value max-value shards)
@@ -329,16 +303,8 @@ allocated now.  Only SBCL shards; elsewhere one locked sketch is used."
                                             :min-value min-value :max-value max-value)))
     (%make-sharded-ddsketch :shards vector)))
 
-(declaim (inline %current-shard-index))
-(defun %current-shard-index (mask)
-  ;; OS thread ids are sequential: a pool of up to SHARDS threads gets one
-  ;; shard each, where an address hash would collide.
-  (declare (type (unsigned-byte 10) mask))
-  #+sbcl (logand (sb-thread:thread-os-tid sb-thread:*current-thread*) mask)
-  #-sbcl (progn mask 0))
-
 (defun sharded-ddsketch-observe (sketch value)
-  "Record VALUE in the calling thread's shard.  Allocates nothing."
+  "Record VALUE in the current CPU's shard.  Allocates nothing."
   (let ((shards (sharded-ddsketch-shards sketch)))
     (ddsketch-observe (svref shards (%current-shard-index (1- (length shards)))) value))
   sketch)

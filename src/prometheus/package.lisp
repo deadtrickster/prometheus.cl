@@ -29,6 +29,8 @@
            #:counter.reset
            #:int-counter
            #:make-int-counter
+           #:*default-shards*
+           #:default-shards
            #:gauge
            #:make-gauge
            #:gauge-metric

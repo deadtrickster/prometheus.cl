@@ -12,7 +12,7 @@ Sketches with the same parameters merge by adding counters, with the same error 
 
 ## Memory
 
-Fixed at creation. With the defaults a sketch is about 2100 words (17KB). A series has `shards` sketches, all allocated with the series, so the default of 16 is about 270KB per series. For high-cardinality families, lower `:shards` or narrow the range.
+Fixed at creation. With the defaults a sketch is about 2100 words (17KB). A series has `shards` sketches, all allocated with the series. The default is one per configured CPU rounded up to a power of two, so about 70KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range.
 
 Nothing is allocated on the hot paths:
 
@@ -26,12 +26,12 @@ Sums and extremes are doubles. Integer observations are exact up to 2^53. Observ
 
 ## Sharding
 
-A thread writes to shard `os-tid mod shards` and shards are combined on read. Thread ids are sequential, so a pool of up to `shards` threads gets one shard each, like prometheus.erl's per-scheduler rows. Collisions only mean two threads share a shard. Elsewhere than SBCL there is one locked sketch.
+A writer uses the shard of the CPU it runs on (`sched_getcpu`), and shards are combined on read, like prometheus.erl's per-scheduler rows. Writes stay atomic since a thread can be preempted or migrated mid-update (#20). On SBCL off Linux the shard is `os-tid mod shards`. Elsewhere than SBCL there is one locked sketch.
 
-`summary.observe` through the API, SBCL 2.6.10, shared 4-core VM, median of 3, million ops/s:
+`summary.observe` through the API, SBCL 2.6.10, shared 4-CPU VM (so 4 shards), median of 3, million ops/s:
 
-| threads | 1 shard | 16 shards |
+| threads | 1 shard | 4 shards |
 |---|---|---|
-| 1 | 6.9 | 8.3 |
-| 4 | 5.7 | 14.1 |
-| 8 | 5.2 | 18.2 |
+| 1 | 7.3 | 6.9 |
+| 4 | 5.7 | 12.7 |
+| 8 | 5.8 | 13.7 |

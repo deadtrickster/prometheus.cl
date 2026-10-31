@@ -97,17 +97,15 @@ sketch.  Returns NIL when no series matches."
                  (ddsketch-merge result shard))))))
 
 (defun make-quantile-summary (&key name help labels value quantiles
-                                (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9) (shards 16)
+                                (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9) (shards (default-shards))
                                 (registry *default-registry*))
   "Make a summary whose QUANTILES (default 0.5, 0.9, 0.95) are estimated with
 a DDSketch: within RELATIVE-ERROR of the true value for observations in
 [MIN-VALUE, MAX-VALUE].  Observations must be non-negative.
 
-Each series is split in SHARDS (a power of two) sketches, one per
-thread hash, read together at scrape time.  All shards are allocated with
-the series: about 17KB per shard with the default range and error, so
-~270KB per series at 16 shards; lower SHARDS or narrow the range for
-high-cardinality families."
+Each series has SHARDS sketches (default one per CPU), combined at scrape
+time and all allocated with the series: about 17KB each with the default
+range and error."
   (check-value-or-labels value labels)
   (check-ddsketch-parameters relative-error min-value max-value shards)
   (let ((summary (make-instance 'quantile-summary :name name

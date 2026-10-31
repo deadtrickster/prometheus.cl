@@ -17,6 +17,7 @@
                   :components
                   ((:file "errors")
                    (:file "cas")
+                   (:file "shards")
                    (:file "ddsketch")
                    (:file "synchronizable")
                    (:file "collectable")
