@@ -36,10 +36,12 @@ jobs:
           curl -sSLO https://beta.quicklisp.org/quicklisp.lisp
           $LISP --load quicklisp.lisp --eval '(quicklisp-quickstart:install)' < /dev/null
           git clone --depth 1 https://github.com/deadtrickster/quantile-estimator.cl "$HOME/quicklisp/local-projects/quantile-estimator"
-          ln -s "$GITHUB_WORKSPACE" "$HOME/quicklisp/local-projects/prometheus.cl"
 
       - name: Test
         run: |
+          # central registry, not a local-projects symlink: CCL does not follow
+          # it and would load the old prometheus from the Quicklisp dist
           $LISP --load "$HOME/quicklisp/setup.lisp" \
+                --eval '(push (uiop:getcwd) asdf:*central-registry*)' \
                 --eval '(ql:quickload :prometheus.test.all)' \
                 --eval '(prometheus.test.all:run :ci t)' < /dev/null
