@@ -52,7 +52,7 @@ Hot paths allocate nothing and use no CLOS. Resolve a series once and keep it - 
 (prom:counter.inc *requests*)
 ```
 
-Counters and quantile summaries are sharded per CPU, so threads on different CPUs do not contend. Label lookups are lock-free.
+Counters, histograms and quantile summaries are sharded per CPU, so threads on different CPUs do not contend. Label lookups are lock-free.
 
 SBCL 2.6.10, 4 CPUs, 32 threads, million ops/s:
 
@@ -61,6 +61,7 @@ SBCL 2.6.10, 4 CPUs, 32 threads, million ops/s:
 | `counter.inc` on a series | 4.2 | 55.6 |
 | `counter.inc` with labels | 1.6 | 26.3 |
 | `gauge.set` on a series, 1 thread, ns/op | 59.6 | 8.0 |
+| `histogram.observe` on a series | 2.5 | 50.0 |
 | summary observe (CKMS -> DDSketch) | 0.3 | 19.2 |
 
 ## Exposers

@@ -11,11 +11,18 @@
   #+ccl 'ccl::double-float-positive-infinity
   #-(or sbcl ccl) 'most-positive-double-float)
 
+(defmacro %-inf ()
+  #+sbcl 'sb-ext:double-float-negative-infinity
+  #+ccl 'ccl::double-float-negative-infinity
+  #-(or sbcl ccl) 'most-negative-double-float)
+
 (declaim (inline %sat+))
 (defun %sat+ (a b)
-  "A + B for non-negative doubles, +Inf instead of an overflow trap."
+  "A + B, +/-Inf instead of an overflow trap. Neither bound computation can
+overflow: B's sign keeps it inside the double range."
   (declare (type double-float a b))
-  (if (<= a (- most-positive-double-float b)) (+ a b) (%+inf)))
+  (cond ((>= b 0d0) (if (<= a (- most-positive-double-float b)) (+ a b) (%+inf)))
+        (t (if (>= a (- most-negative-double-float b)) (+ a b) (%-inf)))))
 
 (defun check-shards (shards)
   (unless (and (typep shards '(integer 1 1024)) (= 1 (logcount shards)))
@@ -224,50 +231,57 @@ evaluated with OLD bound to the current double, as long as WHEN holds."
   #+sbcl (%w->d (counter-cell-double-bits cell))
   #-sbcl (counter-cell-double cell))
 
-(declaim (inline counter-cells-add))
-(defun counter-cells-add (cells n &optional (carry t))
-  "Add non-negative real N to the calling thread's cell. Allocates nothing
-for fixnums and doubles. The integer part is a word per shard: with CARRY
-its overflow moves 2^64 to the double part, without it wraps (uint64). The
-double part saturates at +Inf. Elsewhere than SBCL the caller holds a lock."
-  (declare (type simple-vector cells) (optimize speed))
-  (let ((cell (svref cells (%current-shard-index (1- (length cells))))))
-    (declare (type counter-cell cell))
-    (labels ((add-double (d)
-               (declare (type double-float d))
-               #+sbcl (%cas-double-bits (old counter-cell-double-bits cell) (%sat+ old d))
-               #-sbcl (setf (counter-cell-double cell) (%sat+ (counter-cell-double cell) d)))
-             (add-integer (i)
-               (declare (type counter-word i))
-               (let ((old #+sbcl
-                          ;; ATOMIC-INCF takes a signed delta: the same add modulo 2^64
-                          (sb-ext:atomic-incf (counter-cell-integer cell)
-                                              (if (logbitp 63 i) (- i (ash 1 64)) i))
-                          #-sbcl
-                          (prog1 (counter-cell-integer cell)
-                            (setf (counter-cell-integer cell)
-                                  (ldb (byte 64 0) (+ (counter-cell-integer cell) i))))))
-                 (declare (type counter-word old))
-                 (when (and carry (< (- (ldb (byte 64 0) -1) old) i))
-                   (add-double 1.8446744073709552d19)))))
-      (declare (inline add-integer add-double))
-      ;; generic COERCE returns a boxed double
-      (typecase n
-        (fixnum (add-integer n))
-        (counter-word (add-integer n))
-        (double-float (add-double n))
-        (single-float (add-double (coerce n 'double-float)))
-        (t (add-double (coerce n 'double-float))))))
+(declaim (inline %counter-cell-add))
+(defun %counter-cell-add (cell n &optional (carry t))
+  "Add real N to CELL. Non-negative integers go to the integer word: with
+CARRY its overflow moves 2^64 to the double, without it wraps (uint64). The
+rest goes to the double, which saturates at +/-Inf. Allocates nothing for
+fixnums and doubles. Elsewhere than SBCL the caller holds a lock."
+  (declare (type counter-cell cell) (optimize speed))
+  (labels ((add-double (d)
+             (declare (type double-float d))
+             #+sbcl (%cas-double-bits (old counter-cell-double-bits cell) (%sat+ old d))
+             #-sbcl (setf (counter-cell-double cell) (%sat+ (counter-cell-double cell) d)))
+           (add-integer (i)
+             (declare (type counter-word i))
+             (let ((old #+sbcl
+                        ;; ATOMIC-INCF takes a signed delta: the same add modulo 2^64
+                        (sb-ext:atomic-incf (counter-cell-integer cell)
+                                            (if (logbitp 63 i) (- i (ash 1 64)) i))
+                        #-sbcl
+                        (prog1 (counter-cell-integer cell)
+                          (setf (counter-cell-integer cell)
+                                (ldb (byte 64 0) (+ (counter-cell-integer cell) i))))))
+               (declare (type counter-word old))
+               (when (and carry (< (- (ldb (byte 64 0) -1) old) i))
+                 (add-double 1.8446744073709552d19)))))
+    (declare (inline add-integer add-double))
+    ;; generic COERCE returns a boxed double
+    (typecase n
+      ((integer 0 #.most-positive-fixnum) (add-integer n))
+      (counter-word (add-integer n))
+      (double-float (add-double n))
+      (single-float (add-double (coerce n 'double-float)))
+      (t (add-double (coerce n 'double-float)))))
   nil)
 
+(declaim (inline counter-cells-add))
+(defun counter-cells-add (cells n &optional (carry t))
+  "Add N to the current CPU's cell."
+  (declare (type simple-vector cells))
+  (%counter-cell-add (svref cells (%current-shard-index (1- (length cells)))) n carry))
+
 (defun counter-cells-value (cells)
-  "Sum over shards: an integer while only integers were added."
+  "Sum over shards: an integer while only non-negative integers were added."
   (let ((integer 0)
-        (double 0d0))
+        (double 0d0)
+        (any-double nil))
     (loop for cell across cells
           do (incf integer (counter-cell-integer cell))
-             (setf double (%sat+ double (%counter-cell-double cell))))
-    (if (zerop double) integer (+ integer double))))
+             (let ((d (%counter-cell-double cell)))
+               (unless (zerop d) (setf any-double t))
+               (setf double (%sat+ double d))))
+    (if any-double (+ integer double) integer)))
 
 (defun counter-cells-reset (cells)
   "Zero all shards. Not atomic against concurrent adds."
