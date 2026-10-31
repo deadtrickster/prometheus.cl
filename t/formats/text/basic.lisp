@@ -1,6 +1,6 @@
 (in-package #:prometheus.formats.text.test)
 
-(plan 1)
+(plan 2)
 
 (subtest "Basic test"
   (with-fresh-registry
@@ -64,5 +64,12 @@ qwe_count 4
 ")
 
       (is prom.text:+content-type+ "text/plain; version=0.0.4"))))
+
+(subtest "Quantile summary"
+  (with-fresh-registry
+    (let ((s (prom:make-quantile-summary :name "qwe" :help "h" :quantiles '(0.5) :min-value 1 :max-value 1000)))
+      (prom:summary.observe s 10)
+      (ok (search (format nil "qwe{quantile=\"0.5\"} 10.0~%qwe_sum 10.0~%qwe_count 1~%")
+                  (prometheus.formats.text:marshal))))))
 
 (finalize)
