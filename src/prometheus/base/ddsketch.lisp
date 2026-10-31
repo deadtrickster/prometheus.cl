@@ -357,9 +357,12 @@ fully in or fully out."
   (declare (type ddsketch sketch) (type fixnum pair))
   (let ((data (ddsketch-data sketch)))
     #+prometheus-cas-pair
-    ;; a CAS that expects (0 0) and writes (0 0) returns the pair atomically
-    ;; and changes nothing
-    (multiple-value-bind (a b) (%cas-pair data pair 0 0 0 0)
+    (multiple-value-bind (a b)
+        (if **atomic-pair-load**
+            (%load-pair data pair)
+            ;; without AVX: a CAS expecting (0 0) and writing (0 0) returns
+            ;; the pair atomically and changes nothing, but takes the line
+            (%cas-pair data pair 0 0 0 0))
       (values (%w->d a) (%w->d b)))
     #-prometheus-cas-pair
     (%with-sketch-locked (sketch)
