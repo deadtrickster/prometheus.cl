@@ -1,10 +1,8 @@
-(cl:eval-when (:load-toplevel :execute)
-  (asdf:operate 'asdf:load-op 'cffi-grovel))
-
 (asdf:defsystem :prometheus.collectors.process
   :serial t
   :version "0.1"
   :licence "MIT"
+  :defsystem-depends-on ("cffi-grovel")
   :depends-on ("prometheus"
                "cl-fad"
                "split-sequence"
@@ -14,7 +12,7 @@
                 :serial t
                 :components
                 ((:file "package")
-                 (cffi-grovel:grovel-file "grovel")
+                 (:cffi-grovel-file "grovel")
                  (:file "ffi")
                  (:file "process"))))
   :description "Prometheus.io Process Info Collector")
