@@ -60,23 +60,39 @@
   (sharded-ddsketch-observe (quantile-summary-sharded-sketch summary) value))
 
 (defmethod summary-count ((summary quantile-summary-metric))
+  "A read of its own: for a count consistent with the sum and quantiles use
+WITH-QUANTILE-SUMMARY-READ."
   (sharded-ddsketch-count (quantile-summary-sharded-sketch summary)))
 
 (defmethod summary-sum ((summary quantile-summary-metric))
+  "A read of its own: for a sum consistent with the count and quantiles use
+WITH-QUANTILE-SUMMARY-READ."
   (sharded-ddsketch-sum (quantile-summary-sharded-sketch summary)))
 
-(defmacro with-quantile-summary-estimates ((quantiles estimates) metric &body body)
-  "Run BODY with QUANTILES and ESTIMATES bound to METRIC's quantile vector
-and its scrape buffer, freshly filled, while holding the metric's lock.
-BODY is not run when nothing has been observed.  Allocates nothing; meant
-for exposition code."
-  (let ((m (gensym "METRIC")))
+(defmacro with-quantile-summary-read ((quantiles estimates count sum) metric &body body)
+  "Run BODY with QUANTILES, ESTIMATES, COUNT and SUM from one read of METRIC,
+so they describe the same observations, while holding the metric's lock.
+ESTIMATES is the scrape buffer and only meaningful when COUNT is positive.
+Allocates nothing; meant for exposition code."
+  (let ((m (gensym "METRIC")) (total (gensym "TOTAL")))
     `(let ((,m ,metric))
        (synchronize ,m
          (let ((,quantiles (quantile-summary-metric-quantiles ,m))
                (,estimates (quantile-summary-metric-estimates ,m)))
-           (when (%sharded-quantiles-into (quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
-             ,@body))))))
+           (multiple-value-bind (observed ,total ,sum)
+               (%sharded-quantiles-into (quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
+             (declare (ignore observed))
+             (let ((,count (%count->integer ,total)))
+               ,@body)))))))
+
+(defmacro with-quantile-summary-estimates ((quantiles estimates) metric &body body)
+  "Like WITH-QUANTILE-SUMMARY-READ without count and sum. BODY is not run
+when nothing has been observed."
+  (let ((count (gensym "COUNT")) (sum (gensym "SUM")))
+    `(with-quantile-summary-read (,quantiles ,estimates ,count ,sum) ,metric
+       (declare (ignore ,sum))
+       (when (plusp ,count)
+         ,@body))))
 
 (defmethod summary-quantiles ((summary quantile-summary-metric))
   "Alist of (quantile . estimate); empty until something is observed.

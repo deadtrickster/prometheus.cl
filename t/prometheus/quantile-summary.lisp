@@ -198,6 +198,23 @@
           (bt:join-thread writer)))
       (is bad 0)))
 
+  (subtest "One read gives count, sum and quantiles of the same observations"
+    (let* ((summary (prom:make-quantile-summary :name "qwe" :help "" :quantiles '(0.5) :registry nil))
+           (m (prom:get-metric summary nil))
+           (stop nil)
+           (writers (loop repeat 4
+                          collect (bt:make-thread (lambda () (loop until stop do (prom:summary.observe m 2d0))))))
+           (bad 0))
+      (dotimes (i 200)
+        (prom:with-quantile-summary-read (qs estimates count sum) m
+          (declare (ignore qs))
+          (unless (and (= sum (* 2d0 count))
+                       (or (zerop count) (= (aref estimates 0) 2d0)))
+            (incf bad))))
+      (setf stop t)
+      (mapc #'bt:join-thread writers)
+      (is bad 0)))
+
   (subtest "A snapshot never splits count from sum"
     (let* ((s (prom:make-sharded-ddsketch))
            (stop nil)

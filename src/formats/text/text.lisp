@@ -70,7 +70,16 @@
   (:method ((metric prom:summary-metric) name labels stream)
     (summary-to-text metric name labels stream))
   (:method ((metric prom:quantile-summary-metric) name labels stream)
-    (summary-to-text metric name labels stream)))
+    ;; one read: quantiles, _sum and _count describe the same observations
+    (prom:with-quantile-summary-read (qs estimates count sum) metric
+      (when (plusp count)
+        (let ((q-labels (append labels (list "quantile"))))
+          (dotimes (i (length qs))
+            (print-sample-line stream name q-labels
+                               (append (prom:metric-labels metric) (list (aref qs i)))
+                               (aref estimates i)))))
+      (print-sample-line stream (concatenate 'string name "_sum") labels (prom:metric-labels metric) sum)
+      (print-sample-line stream (concatenate 'string name "_count") labels (prom:metric-labels metric) count))))
 
 (defgeneric metric-family-to-text (mf stream)
   (:method ((mf prom::metric-family) stream)

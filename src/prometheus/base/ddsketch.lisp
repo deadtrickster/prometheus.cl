@@ -299,20 +299,23 @@ MIN is then the largest double and MAX 0."
                              &optional (from 0) (to (1- (ddsketch-buckets proto))))
   "Write into OUT the quantiles QS (ascending) of DATA, an array laid out like
 PROTO's, in one pass over its counts and without allocating. Only buckets
-FROM..TO are read: the caller knows the rest are empty. Returns NIL, leaving
-OUT alone, when there are no observations; T otherwise."
+FROM..TO are read: the caller knows the rest are empty. Returns whether
+anything was observed (OUT is left alone otherwise), the count as a double
+and the sum, all from the same pass over DATA."
   (declare (type ddsketch proto) (type sketch-data data) (type quantile-buffer qs out)
            (type fixnum from to) (optimize (speed 3)))
   (let* ((m (%pair-word (ddsketch-base proto)))
          (first (+ m 2))
-         (total 0d0))
-    (declare (type fixnum m first) (type double-float total))
+         (total 0d0)
+         (sum 0d0))
+    (declare (type fixnum m first) (type double-float total sum))
     ;; counts before extrema: an observation's extrema are written before
     ;; its count, so counted observations always have their extrema in
     (loop for b of-type fixnum from from to to
-          do (incf total (aref data (+ first (* 2 b)))))
+          do (incf total (aref data (+ first (* 2 b))))
+             (incf sum (aref data (+ first (* 2 b) 1))))
     (when (zerop total)
-      (return-from %quantiles-from-data nil))
+      (return-from %quantiles-from-data (values nil 0d0 0d0)))
     (let ((min (aref data m))
           (max (aref data (1+ m)))
           (n (length qs))
@@ -337,7 +340,7 @@ OUT alone, when there are no observations; T otherwise."
       ;; q = 1, or counts grew during the walk
       (loop while (< qi n)
             do (setf (aref out qi) max) (incf qi))
-      t)))
+      (values t total sum))))
 
 (defun %sketch-quantiles-into (sketch qs out)
   ;; extrema first, then the buckets they span
@@ -505,8 +508,9 @@ min only falls and max only rises. Buckets outside are exactly zero."
     (let ((shards (sharded-ddsketch-shards sketch)))
       (multiple-value-bind (data from to)
           (%merge-shards-into shards (sharded-ddsketch-merged sketch))
-        (and (<= from to)
-             (%quantiles-from-data (svref shards 0) data qs out from to))))))
+        (if (<= from to)
+            (%quantiles-from-data (svref shards 0) data qs out from to)
+            (values nil 0d0 0d0))))))
 
 (defun sharded-ddsketch-quantiles-into (sketch qs out)
   "DDSKETCH-QUANTILES-INTO over all shards, merged into the sketch's buffer."

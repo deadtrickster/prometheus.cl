@@ -84,6 +84,7 @@
            #:sharded-ddsketch-quantile
            #:quantile-summary-sharded-sketch
            #:with-quantile-summary-estimates
+           #:with-quantile-summary-read
            #:ddsketch-reset
            #:ddsketch-quantiles-into
            #:sharded-ddsketch-quantiles-into
