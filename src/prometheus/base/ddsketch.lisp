@@ -7,10 +7,15 @@
 (deftype quantile-buffer () '(simple-array double-float (*)))
 (deftype sketch-data () '(simple-array double-float (*)))
 
-(defconstant +sketch-max-buckets+ 65536
-  "Upper bound on buckets per sketch, about 1MB per shard.")
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defconstant +sketch-max-buckets+ 65536
+    "Upper bound on buckets per sketch, about 1MB per shard.")
+  (defconstant +sketch-max-key+ (expt 2 50)))
 
-(defconstant +sketch-max-key+ (expt 2 50))
+;; small index types keep all index arithmetic in fixnums
+(deftype sketch-bucket () `(integer 0 (,+sketch-max-buckets+)))
+(deftype sketch-pair () `(integer 0 (,(+ 512 1 +sketch-max-buckets+))))
+(deftype sketch-word () `(integer 0 (,(* 2 (+ 512 1 +sketch-max-buckets+)))))
 
 ;;; DATA layout, in doubles:
 ;;;   [guard | min max | count0 sum0 | count1 sum1 | ... | guard]
@@ -25,13 +30,13 @@
   (min-value 0d0 :type double-float :read-only t)
   (max-value 0d0 :type double-float :read-only t)
   ;; key of bucket 1
-  (min-key 0 :type fixnum :read-only t)
-  (buckets 0 :type fixnum :read-only t)
+  (min-key 0 :type (integer (#.(- +sketch-max-key+)) (#.+sketch-max-key+)) :read-only t)
+  (buckets 0 :type (integer 0 #.+sketch-max-buckets+) :read-only t)
   ;; key range of in-range values, to bound the key computation
   (key-lo 0d0 :type double-float :read-only t)
   (key-hi 0d0 :type double-float :read-only t)
   ;; pair index of (min max); bucket B is pair BASE + 1 + B
-  (base 0 :type fixnum :read-only t)
+  (base 0 :type (integer 0 (512)) :read-only t)
   (data (make-array 0 :element-type 'double-float) :type sketch-data :read-only t)
   (lock (bt:make-lock "prometheus ddsketch lock") :read-only t))
 
@@ -40,8 +45,9 @@
   #+prometheus-cas-pair `(progn ,@body)
   #-prometheus-cas-pair `(bt:with-lock-held ((ddsketch-lock ,sketch)) ,@body))
 
-(declaim (inline %pair-word))
-(defun %pair-word (pair) (the fixnum (* 2 pair)))
+(declaim (inline %pair-word)
+         (ftype (function (sketch-pair) sketch-word) %pair-word))
+(defun %pair-word (pair) (* 2 pair))
 
 (declaim (inline %sketch-min %sketch-max))
 (defun %sketch-min (s) (aref (ddsketch-data s) (%pair-word (ddsketch-base s))))
@@ -148,8 +154,9 @@ MAX-VALUE."
                               (* (log (the (double-float 1d-300 1d300) d))
                                  (ddsketch-inv-log-gamma sketch))))))
              (declare (type (double-float -1.2d15 1.2d15) x))
-             (min (1- last)
-                  (max 1 (1+ (- (ceiling x) (ddsketch-min-key sketch))))))))))
+             (the sketch-bucket
+                  (min (1- last)
+                       (max 1 (1+ (- (ceiling x) (ddsketch-min-key sketch)))))))))))
 
 #+prometheus-cas-pair
 (defmacro %cas-pair-loop ((a b data pair) (new-a new-b) &key (when t))
@@ -171,7 +178,7 @@ the current doubles, as long as WHEN holds. Retries until the swap lands."
 (defun %sketch-add (sketch bucket count sum min max)
   "Fold MIN, MAX in, then add COUNT and SUM to BUCKET. Extrema go first so a
 reader that sees the count also sees real extrema."
-  (declare (type ddsketch sketch) (type fixnum bucket) (type double-float count sum min max))
+  (declare (type ddsketch sketch) (type sketch-bucket bucket) (type double-float count sum min max))
   (let ((data (ddsketch-data sketch))
         (base (ddsketch-base sketch)))
     #+prometheus-cas-pair
@@ -276,55 +283,45 @@ reader that sees the count also sees real extrema."
                                            :reason "quantiles should be ascending, in [0, 1]")
           do (setf previous q))))
 
-(defun %sketches-quantiles-into (sketches qs out)
-  "Write into OUT the quantiles QS (ascending) of the union of SKETCHES, a
-simple-vector of compatible sketches, in one pass over the buckets and
-without allocating. Returns NIL, leaving OUT alone, when there are no
-observations; T otherwise."
-  (declare (type simple-vector sketches) (type quantile-buffer qs out)
-           (optimize speed))
-  (let ((buckets (ddsketch-buckets (the ddsketch (svref sketches 0))))
-        (total 0d0)
-        (min most-positive-double-float)
-        (max 0d0))
-    (declare (type double-float total min max))
+(defun %quantiles-from-data (proto data qs out)
+  "Write into OUT the quantiles QS (ascending) of DATA, an array laid out like
+PROTO's, in one pass over its counts and without allocating. Returns NIL,
+leaving OUT alone, when there are no observations; T otherwise."
+  (declare (type ddsketch proto) (type sketch-data data) (type quantile-buffer qs out)
+           (optimize (speed 3)))
+  (let* ((buckets (ddsketch-buckets proto))
+         (m (%pair-word (ddsketch-base proto)))
+         (first (+ m 2))
+         (total 0d0))
+    (declare (type fixnum buckets m first) (type double-float total))
     ;; counts before extrema: an observation's extrema are written before
     ;; its count, so counted observations always have their extrema in
-    (loop for s across sketches
-          do (let ((sketch s))
-               (declare (type ddsketch sketch))
-               (incf total (%sketch-total sketch))))
-    (loop for s across sketches
-          do (let ((sketch s))
-               (declare (type ddsketch sketch))
-               (setf min (min min (%sketch-min sketch))
-                     max (max max (%sketch-max sketch)))))
+    (loop for w of-type fixnum from first below (+ first (* 2 buckets)) by 2
+          do (incf total (aref data w)))
     (when (zerop total)
-      (return-from %sketches-quantiles-into nil))
-    (let ((n (length qs))
+      (return-from %quantiles-from-data nil))
+    (let ((min (aref data m))
+          (max (aref data (1+ m)))
+          (n (length qs))
           (qi 0)
           (seen 0d0)
           (last-rank (- total 1d0)))
-      (declare (type fixnum qi) (type double-float seen))
+      (declare (type double-float min max seen last-rank) (type fixnum n qi))
       (loop while (and (< qi n) (<= (aref qs qi) 0d0))
             do (setf (aref out qi) min) (incf qi))
       (dotimes (bucket buckets)
         (when (or (= qi n) (>= (aref qs qi) 1d0))
           (return))
-        ;; no OF-TYPE: CCL's LOOP needs the struct type at macroexpansion
-        (loop for s across sketches
-              do (let ((sketch s))
-                   (declare (type ddsketch sketch))
-                   (incf seen (%bucket-count sketch bucket))))
+        (incf seen (aref data (+ first (* 2 bucket))))
         (loop while (and (< qi n)
                          (< (aref qs qi) 1d0)
                          (> seen (* (aref qs qi) last-rank)))
-              do (let ((estimate (%sketch-bucket-value (svref sketches 0) bucket)))
+              do (let ((estimate (%sketch-bucket-value proto bucket)))
                    (setf (aref out qi) (cond ((< estimate min) min)
                                              ((> estimate max) max)
                                              (t estimate))))
                  (incf qi)))
-      ;; q = 1, or counters grew during the walk
+      ;; q = 1, or counts grew during the walk
       (loop while (< qi n)
             do (setf (aref out qi) max) (incf qi))
       t)))
@@ -334,20 +331,17 @@ observations; T otherwise."
 [0, 1]) of SKETCH into OUT, a double-float array of the same length. Returns
 NIL and leaves OUT alone when SKETCH is empty. Allocates nothing."
   (check-quantile-buffers qs out)
-  (let ((sketches (vector sketch)))
-    (declare (dynamic-extent sketches))
-    (%sketches-quantiles-into sketches qs out)))
+  (%quantiles-from-data sketch (ddsketch-data sketch) qs out))
 
 (defun ddsketch-quantile (sketch q)
   "Estimate the Q-quantile, 0 <= Q <= 1. Returns NIL for an empty sketch.
 The estimate is clamped to the observed [min, max]."
   (unless (and (realp q) (<= 0 q 1))
     (error 'invalid-value-error :value q :reason "quantile should be in [0, 1]"))
-  (let ((sketches (vector sketch))
-        (qs (make-array 1 :element-type 'double-float :initial-element (coerce q 'double-float)))
+  (let ((qs (make-array 1 :element-type 'double-float :initial-element (coerce q 'double-float)))
         (out (make-array 1 :element-type 'double-float :initial-element 0d0)))
-    (declare (dynamic-extent sketches qs out))
-    (when (%sketches-quantiles-into sketches qs out)
+    (declare (dynamic-extent qs out))
+    (when (%quantiles-from-data sketch (ddsketch-data sketch) qs out)
       (aref out 0))))
 
 (declaim (inline %read-pair))
@@ -357,13 +351,12 @@ fully in or fully out."
   (declare (type ddsketch sketch) (type fixnum pair))
   (let ((data (ddsketch-data sketch)))
     #+prometheus-cas-pair
-    (multiple-value-bind (a b)
-        (if **atomic-pair-load**
-            (%load-pair data pair)
-            ;; without AVX: a CAS expecting (0 0) and writing (0 0) returns
-            ;; the pair atomically and changes nothing, but takes the line
-            (%cas-pair data pair 0 0 0 0))
-      (values (%w->d a) (%w->d b)))
+    (if **atomic-pair-load**
+        (%load-pair data pair)
+        ;; without AVX: a CAS expecting (0 0) and writing (0 0) returns the
+        ;; pair atomically and changes nothing, but takes the line
+        (multiple-value-bind (a b) (%cas-pair data pair 0 0 0 0)
+          (values (%w->d a) (%w->d b))))
     #-prometheus-cas-pair
     (%with-sketch-locked (sketch)
       (values (aref data (%pair-word pair)) (aref data (1+ (%pair-word pair)))))))
@@ -402,21 +395,71 @@ To reuse a buffer instead, DDSKETCH-RESET a sketch and DDSKETCH-MERGE into it."
       (ddsketch-merge result s))))
 
 ;;; One sketch per CPU, combined on read. Avoids cache-line contention on
-;;; buckets and extremes.
+;;; buckets and extremes. Reads merge the shards into one buffer, owned by
+;;; the sketch and guarded by a lock only readers take.
 
 (defstruct (sharded-ddsketch (:constructor %make-sharded-ddsketch)
                              (:copier nil))
-  (shards #() :type simple-vector :read-only t))
+  (shards #() :type simple-vector :read-only t)
+  (merged (make-array 0 :element-type 'double-float) :type sketch-data :read-only t)
+  (lock (bt:make-lock "prometheus sharded ddsketch read lock") :read-only t))
 
 (defun make-sharded-ddsketch (&key (shards (default-shards)) (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9))
   "Like MAKE-DDSKETCH, spread over SHARDS (a power of two) sub-sketches, all
-allocated now. Only SBCL shards; elsewhere one locked sketch is used."
+allocated now with one more buffer for reads. Only SBCL shards; elsewhere one
+locked sketch is used."
   (check-ddsketch-parameters relative-error min-value max-value shards)
   (let ((vector (make-array #+sbcl shards #-sbcl 1)))
     (dotimes (i (length vector))
       (setf (svref vector i) (make-ddsketch :relative-error relative-error
                                             :min-value min-value :max-value max-value)))
-    (%make-sharded-ddsketch :shards vector)))
+    (%make-sharded-ddsketch
+     :shards vector
+     :merged (make-array (length (ddsketch-data (svref vector 0)))
+                         :element-type 'double-float :initial-element 0d0))))
+
+(defun %merge-shards-into (shards data)
+  "Set DATA, laid out like the shards, to the sum of SHARDS. Each source pair
+is read in one step. DATA must not be written concurrently."
+  (declare (type simple-vector shards) (type sketch-data data) (optimize (speed 3)))
+  (let* ((proto (the ddsketch (svref shards 0)))
+         (buckets (ddsketch-buckets proto))
+         (base (ddsketch-base proto))
+         (m (%pair-word base))
+         (first (1+ base)))
+    (declare (type fixnum buckets base m first))
+    (fill data 0d0 :start (+ m 2) :end (+ m 2 (* 2 buckets)))
+    (loop for s across shards
+          do (let ((shard s))
+               (declare (type ddsketch shard))
+               (let ((src (ddsketch-data shard)))
+                 #+prometheus-cas-pair
+                 (if **atomic-pair-load**
+                     ;; same instructions for every bucket, empty or not
+                     (loop for p of-type fixnum from first below (+ first buckets)
+                           do (%pair-add data p src p))
+                     (dotimes (b buckets)
+                       (unless (zerop (%bucket-count shard b))
+                         (multiple-value-bind (c sum) (%read-pair shard (+ first b))
+                           (let ((w (%pair-word (+ first b))))
+                             (incf (aref data w) c)
+                             (incf (aref data (1+ w)) sum))))))
+                 #-prometheus-cas-pair
+                 (%with-sketch-locked (shard)
+                   (loop for w of-type fixnum from (+ m 2) below (+ m 2 (* 2 buckets))
+                         do (incf (aref data w) (aref src w)))))))
+    ;; extrema after the buckets: observe writes them first, so they cover
+    ;; every count already summed
+    (let ((min most-positive-double-float) (max 0d0))
+      (declare (type double-float min max))
+      (loop for s across shards
+            do (let ((shard s))
+                 (declare (type ddsketch shard))
+                 (setf min (min min (%sketch-min shard))
+                       max (max max (%sketch-max shard)))))
+      (setf (aref data m) min
+            (aref data (1+ m)) max))
+    data))
 
 (defun sharded-ddsketch-observe (sketch value)
   "Record VALUE in the current CPU's shard. Allocates nothing."
@@ -424,10 +467,18 @@ allocated now. Only SBCL shards; elsewhere one locked sketch is used."
     (ddsketch-observe (svref shards (%current-shard-index (1- (length shards)))) value))
   sketch)
 
+(defun %sharded-quantiles-into (sketch qs out)
+  (declare (type sharded-ddsketch sketch))
+  (bt:with-lock-held ((sharded-ddsketch-lock sketch))
+    (let ((shards (sharded-ddsketch-shards sketch)))
+      (%quantiles-from-data (svref shards 0)
+                            (%merge-shards-into shards (sharded-ddsketch-merged sketch))
+                            qs out))))
+
 (defun sharded-ddsketch-quantiles-into (sketch qs out)
-  "DDSKETCH-QUANTILES-INTO over all shards, in place."
+  "DDSKETCH-QUANTILES-INTO over all shards, merged into the sketch's buffer."
   (check-quantile-buffers qs out)
-  (%sketches-quantiles-into (sharded-ddsketch-shards sketch) qs out))
+  (%sharded-quantiles-into sketch qs out))
 
 (defun sharded-ddsketch-quantile (sketch q)
   (unless (and (realp q) (<= 0 q 1))
@@ -435,7 +486,7 @@ allocated now. Only SBCL shards; elsewhere one locked sketch is used."
   (let ((qs (make-array 1 :element-type 'double-float :initial-element (coerce q 'double-float)))
         (out (make-array 1 :element-type 'double-float :initial-element 0d0)))
     (declare (dynamic-extent qs out))
-    (when (%sketches-quantiles-into (sharded-ddsketch-shards sketch) qs out)
+    (when (%sharded-quantiles-into sketch qs out)
       (aref out 0))))
 
 (defun sharded-ddsketch-count (sketch)
@@ -449,11 +500,12 @@ allocated now. Only SBCL shards; elsewhere one locked sketch is used."
 
 (defun sharded-ddsketch-snapshot (sketch &optional into)
   "A DDSKETCH holding every observation made so far, all shards merged. With
-INTO (a compatible sketch) it is reset and reused instead of allocating."
+INTO (a compatible sketch, not observed into meanwhile) it is reused instead
+of allocating."
   (let* ((shards (sharded-ddsketch-shards sketch))
-         (result (if into
-                     (ddsketch-reset into)
-                     (ddsketch-empty-copy (svref shards 0)))))
-    (loop for shard across shards
-          do (ddsketch-merge result shard))
+         (result (or into (ddsketch-empty-copy (svref shards 0)))))
+    (unless (ddsketch-compatible-p result (svref shards 0))
+      (error 'invalid-value-error :value into
+                                  :reason "sketches were created with different parameters"))
+    (%merge-shards-into shards (ddsketch-data result))
     result))

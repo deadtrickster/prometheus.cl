@@ -75,8 +75,7 @@ for exposition code."
        (synchronize ,m
          (let ((,quantiles (quantile-summary-metric-quantiles ,m))
                (,estimates (quantile-summary-metric-estimates ,m)))
-           (when (%sketches-quantiles-into (sharded-ddsketch-shards (quantile-summary-sharded-sketch ,m))
-                                           ,quantiles ,estimates)
+           (when (%sharded-quantiles-into (quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
              ,@body))))))
 
 (defmethod summary-quantiles ((summary quantile-summary-metric))

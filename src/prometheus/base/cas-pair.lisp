@@ -47,11 +47,12 @@
       (sb-vm::move r1 rax)
       (sb-vm::move r2 rdx)))
 
-  (sb-c:defknown %load-pair ((simple-array * (*)) sb-int:index)
-      (values sb-ext:word sb-ext:word) (sb-c:flushable))
+  (sb-c:defknown %load-pair ((simple-array double-float (*)) sb-int:index)
+      (values double-float double-float) (sb-c:flushable))
 
-  ;; One aligned 16-byte load. Atomic on CPUs with AVX (Intel SDM 9.1.1,
-  ;; AMD APM 7.3.2), check *ATOMIC-PAIR-LOAD* first. SSE2 only.
+  ;; One aligned 16-byte load, split into two doubles without leaving the
+  ;; XMM registers. Atomic on CPUs with AVX (Intel SDM 9.1.1, AMD APM 7.3.2),
+  ;; check **ATOMIC-PAIR-LOAD** first. SSE2 only.
   (sb-c:define-vop (%load-pair)
     (:translate %load-pair)
     (:policy :fast-safe)
@@ -59,25 +60,51 @@
            (i :scs (sb-vm::unsigned-reg)))
     (:arg-types * sb-vm::unsigned-num)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from (:argument 0)) rsi)
-    (:temporary (:sc sb-vm::double-reg :offset 15) xmm15)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rax-offset :to (:result 1)) rax)
-    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rdx-offset :to (:result 1)) rdx)
-    (:results (r1 :scs (sb-vm::unsigned-reg)) (r2 :scs (sb-vm::unsigned-reg)))
-    (:result-types sb-vm::unsigned-num sb-vm::unsigned-num)
-    (:generator 4
-      ;; the instructions are bytes, so the register names only reserve
-      xmm15
+    (:temporary (:sc sb-vm::double-reg :offset 15 :to (:result 1)) xmm15)
+    (:temporary (:sc sb-vm::double-reg :offset 14 :to (:result 1)) xmm14)
+    (:results (r1 :scs (sb-vm::double-reg)) (r2 :scs (sb-vm::double-reg)))
+    (:result-types sb-vm::double-float sb-vm::double-float)
+    (:generator 3
       (sb-vm::move rsi i)
       (sb-assem:inst sb-vm::shl rsi 4)
       (sb-assem:inst sb-vm::add rsi v)
       ;; movdqa xmm15, [rsi + data offset - lowtag]
       (sb-assem:inst sb-assem::.byte #x66 #x44 #x0f #x6f #x7e
                      (- (* sb-vm:vector-data-offset sb-vm:n-word-bytes) sb-vm:other-pointer-lowtag))
-      (sb-assem:inst sb-assem::.byte #x66 #x4c #x0f #x7e #xf8)       ; movq rax, xmm15
-      (sb-assem:inst sb-assem::.byte #x66 #x41 #x0f #x73 #xdf #x08)  ; psrldq xmm15, 8
-      (sb-assem:inst sb-assem::.byte #x66 #x4c #x0f #x7e #xfa)       ; movq rdx, xmm15
-      (sb-vm::move r1 rax)
-      (sb-vm::move r2 rdx)))
+      (sb-assem:inst sb-assem::.byte #x45 #x0f #x12 #xf7)      ; movhlps xmm14, xmm15
+      (sb-assem:inst sb-x86-64-asm::movapd r1 xmm15)
+      (sb-assem:inst sb-x86-64-asm::movapd r2 xmm14)))
+
+  (sb-c:defknown %pair-add ((simple-array double-float (*)) sb-int:index
+                            (simple-array double-float (*)) sb-int:index)
+      (values) ())
+
+  ;; Pair DI of DST += pair SI of SRC, both lanes in one ADDPD. The SRC read
+  ;; is one aligned 16-byte load, atomic under the same condition as
+  ;; %LOAD-PAIR. DST must not be written concurrently.
+  (sb-c:define-vop (%pair-add)
+    (:translate %pair-add)
+    (:policy :fast-safe)
+    (:args (dst :scs (sb-vm::descriptor-reg))
+           (di :scs (sb-vm::unsigned-reg))
+           (src :scs (sb-vm::descriptor-reg))
+           (si :scs (sb-vm::unsigned-reg)))
+    (:arg-types * sb-vm::unsigned-num * sb-vm::unsigned-num)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from (:argument 0)) rsi)
+    (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rdi-offset :from (:argument 0)) rdi)
+    (:temporary (:sc sb-vm::double-reg :offset 15) xmm15)
+    (:generator 4
+      xmm15
+      (sb-vm::move rsi si)
+      (sb-assem:inst sb-vm::shl rsi 4)
+      (sb-assem:inst sb-vm::add rsi src)
+      (sb-vm::move rdi di)
+      (sb-assem:inst sb-vm::shl rdi 4)
+      (sb-assem:inst sb-vm::add rdi dst)
+      (let ((disp (- (* sb-vm:vector-data-offset sb-vm:n-word-bytes) sb-vm:other-pointer-lowtag)))
+        (sb-assem:inst sb-assem::.byte #x66 #x44 #x0f #x6f #x7e disp)    ; movdqa xmm15, [rsi+d]
+        (sb-assem:inst sb-assem::.byte #x66 #x44 #x0f #x58 #x7f disp)    ; addpd  xmm15, [rdi+d]
+        (sb-assem:inst sb-assem::.byte #x66 #x44 #x0f #x7f #x7f disp)))) ; movdqa [rdi+d], xmm15
 
   (defun %detect-atomic-pair-load ()
     ;; CPUID.1:ECX bit 28 AVX, bit 27 OSXSAVE
