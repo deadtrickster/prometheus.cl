@@ -49,49 +49,50 @@
     (error 'invalid-label-name-error :name label :reason "histogram cannot have a label named \"le\""))
   (list :buckets (validate-and-normalize-buckets buckets)))
 
-(defclass histogram-metric (metric)
-  ((value :reader histogram-buckets)
-   (sum :initform 0 :reader histogram-sum)))
+(defstruct (histogram-metric (:include metric) (:copier nil) (:predicate nil))
+  (buckets #() :type simple-vector :read-only t)
+  (sum 0))
 
-(defmethod histogram-count ((metric histogram-metric))
-  (reduce (lambda (val b)
-            (+ val (prom:bucket-count b)))
-          (prom:metric-value metric) :initial-value 0))
+(defmethod histogram-buckets ((metric histogram-metric))
+  (histogram-metric-buckets metric))
+
+(defmethod metric-value ((metric histogram-metric))
+  (histogram-metric-buckets metric))
+
+(defgeneric histogram-sum (metric)
+  (:method ((metric histogram-metric))
+    (histogram-metric-sum metric)))
+
+(defgeneric histogram-count (metric)
+  (:method ((metric histogram-metric))
+    (loop for bucket across (histogram-metric-buckets metric)
+          sum (bucket-count bucket))))
 
 (defmethod mf-make-metric ((metric histogram) labels)
-  (make-instance 'histogram-metric :labels labels
-                                   :value (bucket-bounds-to-buckets (histogram-buckets metric))))
-
-(defun check-histogram-value (value)
-  (unless (numberp value)
-    (error 'invalid-value-error :value value :reason "value is not a number")))
-
-(defgeneric histogram.observe% (histogram value labels)
-  (:method ((histogram histogram) value labels)
-    (let ((metric (get-metric histogram labels)))
-      (histogram.observe% metric value labels)))
-  (:method ((metric histogram-metric) value labels)
-    (declare (ignore labels))
-    #-(or sbcl lispworks)
-    (synchronize metric
-      (loop for bucket across (metric-value metric)
-            do
-               (when (<= value (bucket-bound bucket))
-                 (incf (bucket-count bucket))
-                 (return)))
-      (incf (slot-value metric 'sum) value))
-    #+(or sbcl lispworks)
-    (progn
-      (loop for bucket across (metric-value metric)
-            do
-               (when (<= value (bucket-bound bucket))
-                 (cas-incf (bucket-count bucket) 1)
-                 (return)))
-      (cas-incf (slot-value metric 'sum) value))))
+  (make-histogram-metric :labels labels
+                         :buckets (bucket-bounds-to-buckets (histogram-buckets metric))))
 
 (defun histogram.observe (histogram value &key labels)
-  (check-histogram-value value)
-  (histogram.observe% histogram value labels))
+  "Observe VALUE on HISTOGRAM, a family or a series from GET-METRIC. Passing
+the series skips the label lookup."
+  (unless (numberp value)
+    (error 'invalid-value-error :value value :reason "value is not a number"))
+  (let ((series (if (typep histogram 'histogram-metric) histogram (get-metric histogram labels))))
+    #-(or sbcl lispworks)
+    (synchronize series
+      (loop for bucket across (histogram-metric-buckets series)
+            when (<= value (bucket-bound bucket))
+              do (incf (bucket-count bucket))
+                 (return))
+      (incf (histogram-metric-sum series) value))
+    #+(or sbcl lispworks)
+    (progn
+      (loop for bucket across (histogram-metric-buckets series)
+            when (<= value (bucket-bound bucket))
+              do (cas-incf (bucket-count bucket) 1)
+                 (return))
+      (cas-incf (histogram-metric-sum series) value)))
+  nil)
 
 (defmacro histogram.time (histogram &body body)
   `(timing% (lambda (time)

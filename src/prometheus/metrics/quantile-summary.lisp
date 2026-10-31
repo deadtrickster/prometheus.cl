@@ -33,15 +33,19 @@
     (error 'invalid-label-name-error :name label :reason "summary cannot have a label named \"quantile\""))
   (list :quantiles (normalize-sketch-quantiles quantiles)))
 
-(defclass quantile-summary-metric (metric)
+(defstruct (quantile-summary-metric (:include metric) (:copier nil) (:predicate nil))
   ;; ESTIMATES is the scrape buffer, reused under the metric lock.
-  ((quantiles :initarg :quantiles :reader quantile-summary-metric-quantiles)
-   (estimates :initarg :estimates :reader quantile-summary-metric-estimates)
-   (sketch :initarg :sketch :reader quantile-summary-sharded-sketch)))
+  (quantiles nil :type quantile-buffer :read-only t)
+  (estimates nil :type quantile-buffer :read-only t)
+  (sketch nil :type sharded-ddsketch :read-only t))
+
+(declaim (inline quantile-summary-sharded-sketch))
+(defun quantile-summary-sharded-sketch (summary)
+  (quantile-summary-metric-sketch summary))
 
 (defmethod mf-make-metric ((mf quantile-summary) labels)
   (let ((quantiles (quantile-summary-quantiles mf)))
-    (make-instance 'quantile-summary-metric
+    (make-quantile-summary-metric
                    :labels labels
                    :quantiles quantiles
                    :estimates (make-array (length quantiles) :element-type 'double-float
@@ -50,14 +54,6 @@
                                                   :relative-error (quantile-summary-relative-error mf)
                                                   :min-value (quantile-summary-min-value mf)
                                                   :max-value (quantile-summary-max-value mf)))))
-
-(defmethod summary.observe% ((summary quantile-summary-metric) value count labels)
-  (declare (ignore labels))
-  ;; a simple summary takes COUNT pre-aggregated observations summing to
-  ;; VALUE; a sketch cannot place those in buckets
-  (unless (eql count 1)
-    (error 'invalid-value-error :value count :reason "quantile summary observes one value at a time, count should be 1"))
-  (sharded-ddsketch-observe (quantile-summary-sharded-sketch summary) value))
 
 (defmethod summary-count ((summary quantile-summary-metric))
   "A read of its own: for a count consistent with the sum and quantiles use

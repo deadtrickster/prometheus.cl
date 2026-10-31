@@ -33,9 +33,10 @@
                   :serial t
                   :components
                   ((:file "counter")
+                   (:file "int-counter")
                    (:file "gauge")
                    (:file "histogram")
                    (:file "summary")
                    (:file "quantile-summary")
-                   (:file "int-counter"))))))
+                   (:file "summary-observe"))))))
   :description "Prometheus.io Client")
