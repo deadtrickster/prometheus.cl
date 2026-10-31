@@ -6,7 +6,7 @@
                "prometheus.formats.text"
                "prometheus.exposers.hunchentoot"
                "prometheus.collectors.process"
-               "prometheus.collectors.sbcl")
+               (:feature :sbcl "prometheus.collectors.sbcl"))
   :author "Ilya Khaprov <ilya.kharpov@publitechs.com>"
   :components ((:module "examples"
                 :serial t

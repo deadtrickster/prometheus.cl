@@ -1,7 +1,9 @@
 (in-package #:prometheus)
 
 (defclass registry (synchronizable)
-  ((hash-table :initform (make-hash-table :test #'equal) :reader registry-hash-table)))
+  ((hash-table :initform (make-hash-table :test #'equal) :reader registry-hash-table)
+   ;; registration order, replaced on change: COLLECT reads it without a lock
+   (collectables :initform nil :accessor registry-collectables)))
 
 (defparameter *default-registry* (make-instance 'registry))
 
@@ -15,29 +17,32 @@
       (when-let ((c (gethash (collectable-name collectable) (registry-hash-table registry))))
         (unless (eq c collectable)
           (error 'collectable-already-registered-error :collectable collectable :registry registry :rname (collectable-name collectable))))
+      (unless (gethash (collectable-name collectable) (registry-hash-table registry))
+        (setf (registry-collectables registry)
+              (append (registry-collectables registry) (list collectable))))
       (setf (gethash (collectable-name collectable) (registry-hash-table registry)) collectable))))
 
 (defgeneric unregister% (registry collectable)
   (:method ((registry registry) (collectable collectable))
     (unregister% registry (collectable-name collectable) ))
   (:method ((registry registry) (collectable-name string))
-    (remhash collectable-name (registry-hash-table registry))))
+    (synchronize registry
+      (when-let ((c (gethash collectable-name (registry-hash-table registry))))
+        (setf (registry-collectables registry)
+              (remove c (registry-collectables registry))))
+      (remhash collectable-name (registry-hash-table registry)))))
 
 (defgeneric registered-p% (register collectable-designator)
   (:method ((registry registry) (collectable collectable))
     (when (eq collectable (registered-p% registry (collectable-name collectable)))
       collectable))
   (:method ((registry registry) (collectable-name string))
-    (gethash collectable-name (registry-hash-table registry))))
+    (synchronize registry
+      (values (gethash collectable-name (registry-hash-table registry))))))
 
 (defmethod collect ((registry registry) cb)
-  (with-hash-table-iterator (next (registry-hash-table registry))
-    (loop
-      (multiple-value-bind (more? key collectable) (next)
-        (declare (ignore key))
-        (unless more?
-          (return))
-        (collect collectable cb)))))
+  (dolist (collectable (registry-collectables registry))
+    (collect collectable cb)))
 
 (defun register (collectable &optional (registry *default-registry*))
   (register% registry collectable))
