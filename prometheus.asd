@@ -17,6 +17,9 @@
                   :components
                   ((:file "errors")
                    (:file "cas")
+                   (:file "shards")
+                   (:file "cas-pair")
+                   (:file "ddsketch")
                    (:file "synchronizable")
                    (:file "collectable")
                    (:file "metrics-storage")
@@ -33,5 +36,6 @@
                    (:file "gauge")
                    (:file "histogram")
                    (:file "summary")
+                   (:file "quantile-summary")
                    (:file "int-counter"))))))
   :description "Prometheus.io Client")

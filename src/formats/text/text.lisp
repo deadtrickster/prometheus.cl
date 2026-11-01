@@ -19,6 +19,22 @@
                                                                                           ((floatp lvalue) (format nil "~F" lvalue))
                                                                                           (t lvalue)))) lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
 
+(defun summary-to-text (metric name labels stream)
+  (let ((q-labels (append labels (list "quantile"))))
+    (loop for quantile in (prom:summary-quantiles metric)
+          do
+             (print-sample-line stream name q-labels (append (prom:metric-labels metric) (list (car quantile))) (cdr quantile))))
+  (print-sample-line stream
+                     (concatenate 'string name "_sum")
+                     labels
+                     (prom:metric-labels metric)
+                     (prom:summary-sum metric))
+  (print-sample-line stream
+                     (concatenate 'string name "_count")
+                     labels
+                     (prom:metric-labels metric)
+                     (prom:summary-count metric)))
+
 (defgeneric metric-to-text (metric name family-lables stream)
   (:method ((metric prom:simple-metric) name family-lables stream)
     (let ((*read-default-float-format* 'double-float))
@@ -52,20 +68,18 @@
                        (prom:metric-labels metric)
                        (prom:metric-value metric)))
   (:method ((metric prom:summary-metric) name labels stream)
-    (let ((q-labels (append labels (list "quantile"))))
-      (loop for quantile in (prom:summary-quantiles metric)
-            do
-               (print-sample-line stream name q-labels (append (prom:metric-labels metric) (list (car quantile))) (cdr quantile))))
-    (print-sample-line stream
-                       (concatenate 'string name "_sum")
-                       labels
-                       (prom:metric-labels metric)
-                       (prom:summary-sum metric))
-    (print-sample-line stream
-                       (concatenate 'string name "_count")
-                       labels
-                       (prom:metric-labels metric)
-                       (prom:summary-count metric))))
+    (summary-to-text metric name labels stream))
+  (:method ((metric prom:quantile-summary-metric) name labels stream)
+    ;; one read: quantiles, _sum and _count describe the same observations
+    (prom:with-quantile-summary-read (qs estimates count sum) metric
+      (when (plusp count)
+        (let ((q-labels (append labels (list "quantile"))))
+          (dotimes (i (length qs))
+            (print-sample-line stream name q-labels
+                               (append (prom:metric-labels metric) (list (aref qs i)))
+                               (aref estimates i)))))
+      (print-sample-line stream (concatenate 'string name "_sum") labels (prom:metric-labels metric) sum)
+      (print-sample-line stream (concatenate 'string name "_count") labels (prom:metric-labels metric) count))))
 
 (defgeneric metric-family-to-text (mf stream)
   (:method ((mf prom::metric-family) stream)

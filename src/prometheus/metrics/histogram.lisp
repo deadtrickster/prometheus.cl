@@ -44,8 +44,9 @@
 
 (defmethod validate-args ((mf histogram) &rest initargs &key labels buckets &allow-other-keys)
   (declare (ignore initargs))
-  (when (find "le" labels :test #'equal)
-    (error 'invalid-label-name-error :name "le" :reason "histogram cannot have a label named \"le\""))
+  ;; any case: the text format lowercases label names
+  (when-let ((label (find "le" labels :test #'string-equal)))
+    (error 'invalid-label-name-error :name label :reason "histogram cannot have a label named \"le\""))
   (list :buckets (validate-and-normalize-buckets buckets)))
 
 (defclass histogram-metric (metric)
