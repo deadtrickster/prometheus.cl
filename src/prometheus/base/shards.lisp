@@ -91,9 +91,14 @@ by its host."
                     83)))               ; _SC_NPROCESSORS_CONF
             (if (plusp n) n 16))
           #-(and sbcl linux) 16))
-    (max 1 (min configured
-                (or (length (detect-affinity-cpus)) configured)
-                (or (detect-cpu-quota) configured)))))
+    (%usable-cpus configured (detect-affinity-cpus) (detect-cpu-quota))))
+
+(defun %usable-cpus (configured affinity quota)
+  "CONFIGURED narrowed by the AFFINITY CPU list and QUOTA, either NIL when
+unknown."
+  (max 1 (min configured
+              (if affinity (length affinity) configured)
+              (or quota configured))))
 
 (defun round-up-shards (n)
   (min 1024 (ash 1 (integer-length (1- (max 1 n))))))

@@ -4,7 +4,7 @@
 
 ## Sketch
 
-Value `v` goes to bucket `ceiling(log_gamma v)`, `gamma = (1 + a) / (1 - a)`. Each bucket is reported as `2 gamma^k / (gamma + 1)`, within `a` of every value in it. Counters are dense and preallocated over `[min-value, max-value]`. Below the range (including zero) goes to an underflow counter. Above it goes to an overflow counter. Exact min and max are tracked, and estimates are clamped to them.
+Value `v` goes to bucket `ceiling(log_gamma v)`, `gamma = (1 + a) / (1 - a)`. Each bucket is reported as `2 gamma^k / (gamma + 1)`, within `a` of every value in it. Counters are dense and preallocated over `[min-value, max-value]`. Below the range (including zero) goes to an underflow counter. Above it goes to an overflow counter. Min and max are tracked and estimates are clamped to them. q=0 and q=1 are relative-error estimates like any other quantile: within `a` of the true extremum, not exact.
 
 Bucket values are computed once per parameter set and shared, so reads look them up instead of calling `exp`. Relative error is limited to `1e-6` and above, below that rounding in `log` becomes a visible part of the error.
 
@@ -27,7 +27,7 @@ What that guarantees:
 - a bucket's count and sum change together, so a read or merge never sees one without the other
 - extrema are written before the count, so a counted observation always has real extrema (an empty sketch holds placeholders: min is the largest double, max is 0)
 - a merge from a sketch that is still being written reads each bucket in one step, and may leave out observations that land during the merge
-- extrema are written before counts, so a read may see the min or max of an observation it did not count. Reads bound min from below by the value of the lowest counted bucket, and max from above by the highest's. That keeps both within `a` of what was counted, and exact whenever the true extremum is already inside that bound
+- extrema are written before counts, so a read may see the min or max of an observation it did not count. Reads bound min from below by the value of the lowest counted bucket, and max from above by the highest's. That keeps both within `a` of what was counted
 
 Counts are doubles, exact up to 2^53, so the whole array is uniform and a pair is two lanes of one SSE register. Guards of one cache line (measured at load) keep other objects off the lines being written.
 

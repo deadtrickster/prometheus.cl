@@ -366,8 +366,7 @@ and the sum, all from the same pass over DATA."
     ;; extrema are written before counts, so they may come from an
     ;; observation this read did not count. Bounding them by the value of the
     ;; lowest and highest counted bucket keeps them within alpha of what was
-    ;; counted, and exact whenever they are already inside. Underflow and
-    ;; overflow buckets carry no bound.
+    ;; counted. Underflow and overflow buckets carry no bound.
     (let* ((reps (ddsketch-reps proto))
            (last (1- (ddsketch-buckets proto)))
            (min (let ((min (aref data m)))
@@ -420,7 +419,8 @@ NIL and leaves OUT alone when SKETCH is empty. Allocates nothing."
 
 (defun ddsketch-quantile (sketch q)
   "Estimate the Q-quantile, 0 <= Q <= 1. Returns NIL for an empty sketch.
-The estimate is clamped to the observed [min, max]."
+Within the relative error for q = 0 and q = 1 too, not the exact extremum:
+use DDSKETCH-MIN and DDSKETCH-MAX for those."
   (unless (and (realp q) (<= 0 q 1))
     (error 'invalid-value-error :value q :reason "quantile should be in [0, 1]"))
   (let ((qs (make-array 1 :element-type 'double-float :initial-element (coerce q 'double-float)))
