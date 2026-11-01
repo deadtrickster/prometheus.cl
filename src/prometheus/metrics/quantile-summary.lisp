@@ -113,13 +113,16 @@ Conses the alist; exposition code should use WITH-QUANTILE-SUMMARY-ESTIMATES."
 latency distribution across all endpoints.  Merges into INTO, reset first,
 when given (a sketch made with the family's parameters), else into a new
 sketch.  Returns NIL when no series matches."
-  (let ((result nil))
-    (dolist (metric (get-metrics summary) result)
-      (when (funcall test (metric-labels metric))
-        (loop for shard across (sharded-ddsketch-shards (quantile-summary-sharded-sketch metric))
-              do (unless result
-                   (setf result (if into (ddsketch-reset into) (ddsketch-empty-copy shard))))
-                 (ddsketch-merge result shard))))))
+  (let ((metrics (remove-if-not (lambda (m) (funcall test (metric-labels m)))
+                                (get-metrics summary))))
+    (when metrics
+      (flet ((shards (m) (sharded-ddsketch-shards (quantile-summary-sharded-sketch m))))
+        ;; every check before INTO is reset, so a bad INTO keeps its data
+        (when into
+          (dolist (m metrics) (check-merge-target into (shards m))))
+        (let ((result (if into (ddsketch-reset into) (ddsketch-empty-copy (svref (shards (first metrics)) 0)))))
+          (dolist (m metrics result)
+            (loop for shard across (shards m) do (ddsketch-merge result shard))))))))
 
 (defun make-quantile-summary (&key name help labels value quantiles
                                 (relative-error 0.01d0) (min-value 1d-9) (max-value 1d9) (shards (default-shards))

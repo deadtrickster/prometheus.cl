@@ -81,24 +81,28 @@ ancestors allows, rounded up, or NIL without one."
   #-(and sbcl linux) nil)
 
 (defun detect-cpu-count ()
-  "CPUs this process can use at once: configured CPUs, narrowed by CPU
-affinity (cpusets) and the cgroup CPU quota, so a container is not sized
-by its host."
-  (let ((configured
-          #+(and sbcl linux)
-          (let ((n (sb-alien:alien-funcall
-                    (sb-alien:extern-alien "sysconf" (function sb-alien:long sb-alien:int))
-                    83)))               ; _SC_NPROCESSORS_CONF
-            (if (plusp n) n 16))
-          #-(and sbcl linux) 16))
-    (%usable-cpus configured (detect-affinity-cpus) (detect-cpu-quota))))
+  "CPUs this process can use at once: online CPUs, narrowed by CPU affinity
+(cpusets) and the cgroup CPU quota, so a container is not sized by its
+host. 4 when the OS cannot tell."
+  (%usable-cpus (or (detect-online-cpus) 4) (detect-affinity-cpus) (detect-cpu-quota)))
 
-(defun %usable-cpus (configured affinity quota)
-  "CONFIGURED narrowed by the AFFINITY CPU list and QUOTA, either NIL when
+(defun detect-online-cpus ()
+  "Online CPUs from sysconf, or NIL where the constant is not known."
+  #+(and sbcl (or linux darwin freebsd))
+  (let ((n (sb-alien:alien-funcall
+            (sb-alien:extern-alien "sysconf" (function sb-alien:long sb-alien:int))
+            ;; _SC_NPROCESSORS_ONLN
+            #+linux 84 #+(or darwin freebsd) 58)))
+    (and (plusp n) n))
+  #+ccl (ccl:cpu-count)
+  #-(or (and sbcl (or linux darwin freebsd)) ccl) nil)
+
+(defun %usable-cpus (online affinity quota)
+  "ONLINE narrowed by the AFFINITY CPU list and QUOTA, either NIL when
 unknown."
-  (max 1 (min configured
-              (if affinity (length affinity) configured)
-              (or quota configured))))
+  (max 1 (min online
+              (if affinity (length affinity) online)
+              (or quota online))))
 
 (defun round-up-shards (n)
   (min 1024 (ash 1 (integer-length (1- (max 1 n))))))

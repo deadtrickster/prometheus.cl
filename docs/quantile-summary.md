@@ -37,7 +37,7 @@ A standalone `ddsketch` has one writer or none. It is either a shard, read only 
 
 ## Memory
 
-Fixed at creation. With the defaults a sketch is about 2100 buckets, two doubles each, so 34KB. A series has `shards` sketches, all allocated with the series. The default is one per CPU the process can use (configured CPUs narrowed by affinity and the tightest cgroup CPU quota up the hierarchy, so a container is not sized by its host), rounded up to a power of two, so about 135KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range. Parameters are limited to 65536 buckets per sketch.
+Fixed at creation. With the defaults a sketch is about 2100 buckets, two doubles each, so 34KB. A series has `shards` sketches, all allocated with the series. The default is one per CPU the process can use (online CPUs narrowed by affinity and the tightest cgroup CPU quota up the hierarchy, so a container is not sized by its host), rounded up to a power of two, so about 135KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range. Parameters are limited to 65536 buckets per sketch.
 
 Nothing is allocated on the hot paths:
 

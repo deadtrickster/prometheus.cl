@@ -467,6 +467,19 @@ FROM may be left out. Allocates nothing."
           (%sketch-add into b c s (%sketch-min from) (%sketch-max from))))))
   into)
 
+(defun check-merge-target (into sources)
+  "Signal INVALID-VALUE-ERROR before INTO is touched when it cannot take the
+sketches in SOURCES (a simple-vector): different parameters, or one of them,
+which resetting it would wipe."
+  (declare (type simple-vector sources))
+  (loop for from across sources
+        do (when (eq into from)
+             (error 'invalid-value-error :value into
+                                         :reason "merge target is one of the sketches merged"))
+           (unless (ddsketch-compatible-p into from)
+             (error 'invalid-value-error :value into
+                                         :reason "sketches were created with different parameters"))))
+
 (defun ddsketch-empty-copy (sketch)
   "A new empty sketch with SKETCH's parameters."
   (make-ddsketch :relative-error (ddsketch-relative-error sketch)
@@ -616,9 +629,7 @@ INTO (a compatible sketch, not observed into meanwhile) it is reused instead
 of allocating."
   (let* ((shards (sharded-ddsketch-shards sketch))
          (result (or into (ddsketch-empty-copy (svref shards 0)))))
-    (unless (ddsketch-compatible-p result (svref shards 0))
-      (error 'invalid-value-error :value into
-                                  :reason "sketches were created with different parameters"))
+    (check-merge-target result shards)
     (if (%same-layout-p result (svref shards 0))
         (%merge-shards-into shards (ddsketch-data result))
         (progn (ddsketch-reset result)

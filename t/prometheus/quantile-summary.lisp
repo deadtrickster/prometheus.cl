@@ -292,6 +292,13 @@
         (mapc #'bt:join-thread writers))
       (is bad 0)))
 
+  (subtest "A snapshot into one of its own shards is refused"
+    (let* ((s (prom:make-sharded-ddsketch :shards 1))
+           (shard (svref (prom::sharded-ddsketch-shards s) 0)))
+      (loop for v from 1 to 10 do (prom:sharded-ddsketch-observe s v))
+      (is-error (prom:sharded-ddsketch-snapshot s shard) prom:invalid-value-error)
+      (is (prom:ddsketch-count shard) 10)))
+
   (subtest "A snapshot into a sketch with another layout"
     (let* ((s (prom:make-sharded-ddsketch))
            (target (let ((prom::*cache-line-bytes* (* 4 prom::*cache-line-bytes*)))
@@ -343,7 +350,17 @@
       (is (prom:ddsketch-count (prom:quantile-summary-merged-sketch
                                 s :test (lambda (labels) (equal labels '("/a")))))
           100)
-      (is (prom:quantile-summary-merged-sketch s :test (constantly nil)) nil)))
+      (is (prom:quantile-summary-merged-sketch s :test (constantly nil)) nil)
+      ;; a target that cannot take the merge keeps its data
+      (let ((other (prom:make-ddsketch :relative-error 0.02d0)))
+        (prom:ddsketch-observe other 5)
+        (is-error (prom:quantile-summary-merged-sketch s :into other) prom:invalid-value-error)
+        (is (prom:ddsketch-count other) 1 "incompatible target untouched"))
+      (let ((shard (svref (prom::sharded-ddsketch-shards
+                           (prom::quantile-summary-sharded-sketch (prom:get-metric s '("/a"))))
+                          0)))
+        (is-error (prom:quantile-summary-merged-sketch s :into shard) prom:invalid-value-error)
+        (is (prom:ddsketch-count (prom:quantile-summary-merged-sketch s)) 200 "own shard not wiped"))))
 
   (subtest "REGISTRY"
     (with-fresh-registry
