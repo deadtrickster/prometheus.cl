@@ -16,6 +16,7 @@
                   :serial t
                   :components
                   ((:file "errors")
+                   (:file "floats")
                    (:file "cas")
                    (:file "shards")
                    (:file "cas-pair")
