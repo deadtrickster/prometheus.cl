@@ -112,7 +112,8 @@ Conses the alist; exposition code should use WITH-QUANTILE-SUMMARY-ESTIMATES."
   "Merge every series of SUMMARY whose label values satisfy TEST, e.g. the
 latency distribution across all endpoints.  Merges into INTO, reset first,
 when given (a sketch made with the family's parameters), else into a new
-sketch.  Returns NIL when no series matches."
+sketch.  INTO is checked before it is reset, and left alone when no
+series matches, in which case NIL is returned."
   (let ((metrics (remove-if-not (lambda (m) (funcall test (metric-labels m)))
                                 (get-metrics summary))))
     (when metrics
