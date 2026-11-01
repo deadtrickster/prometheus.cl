@@ -6,17 +6,11 @@
   ()
   (:default-initargs :type "counter"))
 
+(defstruct (int-counter-metric (:include counter-metric) (:copier nil) (:predicate nil)))
+
 (defmethod mf-make-metric ((metric int-counter) labels)
-  (make-instance 'int-counter-metric :labels labels
-                                     :cells (make-counter-cells (counter-shards metric))))
-
-(defclass int-counter-metric (counter-metric)
-  ())
-
-(defmethod counter.inc% ((int-counter int-counter-metric) n labels)
-  (unless (typep n '(unsigned-byte 64))
-    (error 'invalid-value-error :value n :reason "value is not an uint64"))
-  (call-next-method))
+  (make-int-counter-metric :labels labels
+                           :cells (make-counter-cells (counter-shards metric))))
 
 (defun make-int-counter (&key name help labels value (shards (default-shards)) (registry *default-registry*))
   (check-value-or-labels value labels)

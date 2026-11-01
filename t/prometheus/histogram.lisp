@@ -24,12 +24,46 @@
   (subtest "OBSERVE"
     (let* ((h (prom:make-histogram :name "qwe" :help "" :buckets '(2 4 6) :value '(4.5 1 0.5) :registry nil))
            (nlm (prom:get-metric h nil)))
-      (is (prom:histogram-sum nlm) 6.0)
+      (is (prom:histogram-sum nlm) 6.0d0)
       (is (prom:histogram-count nlm) 3)
       (is-histogram-stat nlm 2 0 1 0)
       (prom:histogram.observe h 4)
       (prom:histogram.observe h 12)
       (is-histogram-stat nlm 2 1 1 1)))
+
+  (subtest "Placement"
+    (let* ((h (prom:make-histogram :name "qwe" :help "" :buckets '(-1 0 2.5d0 10) :registry nil))
+           (nlm (prom:get-metric h nil)))
+      (dolist (v '(-5 -1 0 1/2 2.5d0 3 10 11 1d300))
+        (prom:histogram.observe nlm v))
+      ;; per bucket: (-inf,-1] (-1,0] (0,2.5] (2.5,10] (10,+inf)
+      (is-histogram-stat nlm 2 1 2 2 2)
+      (is (prom:histogram-count nlm) 9)))
+
+  (subtest "Integer sums stay exact"
+    (let ((nlm (prom:get-metric (prom:make-histogram :name "qwe" :help "" :buckets '(10) :registry nil) nil)))
+      (prom:histogram.observe nlm 3)
+      (prom:histogram.observe nlm (expt 2 62))
+      (is (prom:histogram-sum nlm) (+ 3 (expt 2 62)))))
+
+  (subtest "Concurrent observe is exact"
+    (let ((nlm (prom:get-metric (prom:make-histogram :name "qwe" :help "" :buckets '(10 100) :registry nil) nil)))
+      (mapc #'bt:join-thread
+            (loop repeat 8
+                  collect (bt:make-thread (lambda () (loop for i from 1 to 10000 do (prom:histogram.observe nlm (mod i 200)))))))
+      (is (prom:histogram-count nlm) 80000)
+      (is (prom:histogram-sum nlm) (* 8 (loop for i from 1 to 10000 sum (mod i 200))))
+      (is-histogram-stat nlm 4400 36000 39600)))
+
+  #+sbcl
+  (subtest "Nothing allocated on observe"
+    (let ((nlm (prom:get-metric (prom:make-histogram :name "qwe" :help "" :buckets '(1 10 100) :registry nil) nil))
+          (d 2.5d0))
+      (is (loop repeat 5
+                minimize (let ((before (sb-ext:get-bytes-consed)))
+                           (dotimes (i 100000) (prom:histogram.observe nlm d) (prom:histogram.observe nlm 7))
+                           (- (sb-ext:get-bytes-consed) before)))
+          0)))
 
   (subtest "Single-float bounds"
     (let* ((h (prom:make-histogram :name "qwe" :help "" :buckets '(0.005 0.01) :registry nil))

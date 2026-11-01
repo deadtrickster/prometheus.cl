@@ -7,43 +7,32 @@
   (:default-initargs :type "gauge"))
 
 (defmethod mf-make-metric ((metric gauge) labels)
-  (make-instance 'gauge-metric :labels labels))
+  (make-gauge-metric :labels labels))
 
-(defclass gauge-metric (simple-metric)
-  ((value :initform +gauge-default+)))
+(defstruct (gauge-metric (:include simple-metric) (:copier nil) (:predicate nil))
+  (value +gauge-default+))
 
+(defmethod metric-value ((gauge gauge-metric))
+  (gauge-metric-value gauge))
+
+(declaim (inline check-gauge-value))
 (defun check-gauge-value (value)
   (unless (numberp value)
     (error 'invalid-value-error :value value :reason "value is not a number")))
 
-(defgeneric gauge.set% (gauge value labels)
-  (:method ((gauge gauge) value labels)
-    (let ((metric (get-metric gauge labels)))
-      (gauge.set% metric value labels)))
-  (:method ((gauge gauge-metric) value labels)
-    (declare (ignore labels)
-             (optimize (speed 3) (debug 0) (safety 0)))
-   #-(or sbcl lispworks)
-    (synchronize gauge
-      (setf (slot-value gauge 'value) value))
-    #+(or sbcl lispworks)
-    (loop
-      as old = (slot-value gauge 'value)
-      when (cas (slot-value gauge 'value) old value) do
-         (return))))
-
 (defun gauge.set (gauge value &key labels)
+  "Set GAUGE, a family or a series from GET-METRIC. Passing the series skips
+the label lookup."
   (check-gauge-value value)
-  (gauge.set% gauge value labels))
+  ;; a slot store is atomic, no CAS needed
+  (setf (gauge-metric-value (if (typep gauge 'gauge-metric) gauge (get-metric gauge labels)))
+        value)
+  nil)
 
-(defgeneric gauge.reset (gauge &key labels)
-  (:method ((gauge gauge) &key labels)
-    (let ((metric (get-metric gauge labels)))
-      (gauge.reset metric)))
-  (:method ((gauge gauge-metric) &key labels)
-    (declare (ignore labels))
-    (synchronize gauge
-      (setf (slot-value gauge 'value) +gauge-default+))))
+(defun gauge.reset (gauge &key labels)
+  (setf (gauge-metric-value (if (typep gauge 'gauge-metric) gauge (get-metric gauge labels)))
+        +gauge-default+)
+  nil)
 
 (defun make-gauge (&key name help labels value (registry *default-registry*))
   (check-value-or-labels value labels)

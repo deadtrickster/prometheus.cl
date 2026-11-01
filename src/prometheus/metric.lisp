@@ -70,27 +70,39 @@
   (funcall cb mf))
 
 (defmethod get-metric ((mf metric-family) labels)
-  (or (and (not labels)
-           (metric-family-no-labels-metric mf))
-      (progn
-        (check-label-values labels (metric-family-labels mf))
-        (get-or-add-metric (metric-family-metrics mf) labels
-                           (lambda (labels) (mf-make-metric mf labels))))))
+  ;; labels are validated only when a series is created
+  (let ((storage (metric-family-metrics mf)))
+    (cond ((and (not labels) (metric-family-no-labels-metric mf)))
+          ((not storage)
+           (check-label-values labels (metric-family-labels mf)))
+          ((get-metric storage labels))
+          (t
+           ;; the closure is only built on a miss
+           (get-or-add-metric storage labels
+                              (lambda (labels)
+                                (check-label-values labels (metric-family-labels mf))
+                                (mf-make-metric mf labels)))))))
 
 (defmethod get-metrics ((mf metric-family))
   (if-let ((nlm (metric-family-no-labels-metric mf)))
     (list nlm)
     (get-metrics (metric-family-metrics mf))))
 
-(defclass metric (synchronizable)
-  ((labels :initform nil :initarg :labels :reader metric-labels)
-   (value :initarg :value :reader metric-value)))
+;;; A series is a struct: the hot-path functions dispatch on it with
+;;; TYPECASE, no CLOS. Resolve it once with GET-METRIC and keep it.
+(defstruct (metric (:constructor nil) (:copier nil) (:predicate nil))
+  (labels nil :read-only t)
+  (lock (bt:make-lock "prometheus metric") :read-only t))
+
+(defmethod synchronizable-lock ((metric metric))
+  (metric-lock metric))
+
+(defgeneric metric-value (metric))
 
 (defmethod metric-value ((mf metric-family))
   (metric-value (get-metric mf nil)))
 
-(defclass simple-metric (metric)
-  ())
+(defstruct (simple-metric (:include metric) (:constructor nil) (:copier nil) (:predicate nil)))
 
 (defun check-value-or-labels (value labels)
   (assert (not (and labels value)) nil 'invalid-value-error :value value :reason "can only specify at most one of value and labels"))

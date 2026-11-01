@@ -1,6 +1,6 @@
 (in-package :prometheus.test)
 
-(plan 2)
+(plan 3)
 
 (subtest "Counter"
   (subtest "Errors & Validations"
@@ -67,5 +67,43 @@
         (is (consed (lambda () (dotimes (i 100000) (prom:counter.inc m)))) 0 "counter.inc fixnum")
         (is (consed (lambda () (dotimes (i 100000) (prom:counter.inc m :value d)))) 0 "counter.inc double")
         (is (consed (lambda () (dotimes (i 100000) (prom:counter.inc im :value 3)))) 0 "int-counter inc")))))
+
+(subtest "Series lookup"
+  (subtest "Concurrent create and lookup"
+    (let ((c (prom:make-counter :name "qwe" :help "" :labels '("path") :registry nil))
+          (paths (loop for i below 50 collect (format nil "/p~a" i))))
+      (mapc #'bt:join-thread
+            (loop repeat 8
+                  collect (bt:make-thread
+                           (lambda ()
+                             (loop repeat 200
+                                   do (dolist (p paths)
+                                        (prom:counter.inc c :labels (list p))))))))
+      (is (length (prom::get-metrics c)) 50)
+      (ok (every (lambda (p) (= (prom:metric-value (prom:get-metric c (list p))) 1600)) paths))))
+
+  (subtest "Validated on creation"
+    (let ((c (prom:make-counter :name "qwe" :help "" :labels '("path") :registry nil)))
+      (is-error (prom:counter.inc c :labels '(1)) prom:invalid-label-value-error)
+      (is-error (prom:counter.inc c :labels '("a" "b")) prom:invalid-label-count-error)
+      (is (length (prom::get-metrics c)) 0)))
+
+  (subtest "Stored labels are a copy"
+    (let* ((c (prom:make-counter :name "qwe" :help "" :labels '("path") :registry nil))
+           (labels (list (copy-seq "/a"))))
+      (prom:counter.inc c :labels labels)
+      (setf (first labels) "/b")
+      (is (prom:metric-labels (first (prom::get-metrics c))) '("/a"))))
+
+  #+sbcl
+  (subtest "Nothing allocated on labelled inc"
+    (let* ((c (prom:make-counter :name "qwe" :help "" :labels '("path") :registry nil))
+           (labels (list "/a")))
+      (prom:counter.inc c :labels labels)
+      (is (loop repeat 5
+                minimize (let ((before (sb-ext:get-bytes-consed)))
+                           (dotimes (i 100000) (prom:counter.inc c :labels labels))
+                           (- (sb-ext:get-bytes-consed) before)))
+          0))))
 
 (finalize)

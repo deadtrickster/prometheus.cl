@@ -10,11 +10,23 @@
   ())
 
 (defmethod mf-make-metric ((metric simple-summary) labels)
-  (make-instance 'simple-summary-metric :labels labels))
+  (make-simple-summary-metric :labels labels))
 
-(defclass simple-summary-metric (metric)
-  ((value :initform +summary-default+ :reader summary-count)
-   (sum :initform +summary-default+ :reader summary-sum)))
+(defgeneric summary-count (summary))
+(defgeneric summary-sum (summary))
+
+(defstruct (simple-summary-metric (:include metric) (:copier nil) (:predicate nil))
+  (count +summary-default+)
+  (sum +summary-default+))
+
+(defmethod metric-value ((summary simple-summary-metric))
+  (simple-summary-metric-count summary))
+
+(defmethod summary-count ((summary simple-summary-metric))
+  (simple-summary-metric-count summary))
+
+(defmethod summary-sum ((summary simple-summary-metric))
+  (simple-summary-metric-sum summary))
 
 (defclass summary (summary-base)
   ((quantiles :initarg :quantiles :reader summary-quantiles%)))
@@ -23,14 +35,15 @@
   (apply #'quantile-estimator:make-estimator (summary-quantiles% summary)))
 
 (defmethod mf-make-metric ((metric summary) labels)
-  (make-instance 'summary-metric :labels labels
-                                 :estimator (create-summary-estimator metric)))
+  (make-summary-metric :labels labels
+                       :estimator (create-summary-estimator metric)))
 
-(defclass summary-metric (metric)
-  ((estimator :initarg :estimator :reader summary-estimator)
-   (mutex :initform (bt:make-lock "prometheus summary lock") :reader summary-mutex)
-   (count :initform +summary-default+ :reader summary-count)
-   (sum :initform +summary-default+ :reader summary-sum)))
+(defstruct (summary-metric (:include metric) (:copier nil) (:predicate nil))
+  (estimator nil :read-only t))
+
+(declaim (inline summary-estimator))
+(defun summary-estimator (summary)
+  (summary-metric-estimator summary))
 
 (defgeneric summary-quantiles (summary))
 
@@ -45,41 +58,6 @@
 
 (defmethod summary-sum ((summary summary-metric))
   (estimator-sum (summary-estimator summary)))
-
-(defun check-summary-value (value)
-  (unless (numberp value)
-    (error 'invalid-value-error :value value :reason "value is not a number")))
-
-(defgeneric summary.observe% (summary value count labels)
-  (:method ((summary summary-base) value count labels)
-    (let ((metric (get-metric summary labels)))
-      (summary.observe% metric value count nil)))
-  (:method ((summary simple-summary-metric) value count labels)
-    (declare (ignore labels))
-    #-(or sbcl lispworks)
-    (synchronize summary
-      (incf (slot-value summary 'value) count)
-      (incf (slot-value summary 'sum) value))
-    #+(or sbcl lispworks)
-    (progn
-      (cas-incf (slot-value summary 'value) count)
-      (cas-incf (slot-value summary 'sum) value)))
-  (:method ((summary summary-metric) value count labels)
-    (declare (ignore labels))
-    (assert (= count 1))
-    (bt:with-lock-held ((summary-mutex summary))
-      (estimator.observe (summary-estimator summary)
-                         value)
-      (estimator-sum (summary-estimator summary)))))
-
-(defun summary.observe (summary value &key (count 1) labels)
-  (check-summary-value value)
-  (summary.observe% summary value count labels))
-
-(defmacro summary.time (summary &body body)
-  `(timing% (lambda (time)
-              (summary.observe ,summary time))
-            (lambda () ,@body)))
 
 (defun make-simple-summary (&key name help labels value (count 1) (registry *default-registry*))
   (check-value-or-labels value labels)

@@ -43,28 +43,26 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
  
 Linux? only
 
-## Performance / Optimization
+## Performance
 
-### Counter
-On SBCL counter can use CAS. On SBCL int counter can use atomic-incf.
+Hot paths allocate nothing and use no CLOS. Resolve a series once and keep it - this skips the label lookup:
 
-Benchmark (30 threads each doing 100000 counter.inc):
+```lisp
+(defvar *requests* (prom:get-metric requests-counter '("get")))
+(prom:counter.inc *requests*)
+```
 
-| Method        | Avg inc n/s |
-| ------------- |:-----------:|
-| Mutex         | 7885        |
-| CAS (SBCL)    | 1902        |
-| ATOMIC (SBCL) | 141         |
+Counters, histograms and quantile summaries are sharded per CPU, so threads on different CPUs do not contend. Label lookups are lock-free.
 
-### Gauge
-On SBCL gauge can use CAS.
+SBCL 2.6.10, 4 CPUs, 32 threads, million ops/s:
 
-Benchmark (30 threads each doing 100000 gauge.set):
-
-| Method        | Avg set n/s |
-| ------------- |:-----------:|
-| Mutex         | 9618        |
-| CAS (SBCL)    | 2204        |
+| | 0.4 | now |
+|---|---|---|
+| `counter.inc` on a series | 4.2 | 55.6 |
+| `counter.inc` with labels | 1.6 | 26.3 |
+| `gauge.set` on a series, 1 thread, ns/op | 59.6 | 8.0 |
+| `histogram.observe` on a series | 2.5 | 50.0 |
+| summary observe (CKMS -> DDSketch) | 0.3 | 19.2 |
 
 ## Exposers
 
