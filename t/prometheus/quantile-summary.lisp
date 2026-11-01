@@ -60,25 +60,22 @@
             (aref data (1+ m)) 1.021d0)
       (ok (within-relative-error-p (prom:ddsketch-quantile s 0) 1d0 0.01d0) "q=0, one bucket below")
       (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 1d0 0.01d0) "q=1, one bucket above"))
-    ;; a quiet sketch keeps its exact extrema
+    ;; same bucket: 1.0001 counted, 1.019 only in max
+    (let* ((s (prom:make-ddsketch))
+           (data (prom::ddsketch-data s))
+           (m (* 2 (prom::ddsketch-base s))))
+      (prom:ddsketch-observe s 1.0001d0)
+      (setf (aref data (1+ m)) 1.019d0)
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 1.0001d0 0.01d0) "q=1, same bucket"))
+    ;; a quiet sketch keeps extrema already inside the bound
     (let ((s (prom:make-ddsketch)))
       (prom:ddsketch-observe s 0.995d0)
       (prom:ddsketch-observe s 1.005d0)
       (is (prom:ddsketch-quantile s 0) 0.995d0)
       (is (prom:ddsketch-quantile s 1) 1.005d0)))
 
-  (subtest "Bucket floors agree with observe"
-    (let* ((s (prom:make-ddsketch))
-           (floors (prom::ddsketch-floors s))
-           (bad 0))
-      (loop for b from 1 below (length floors)
-            for x = (aref floors b)
-            do (unless (and (= b (prom::%sketch-index s x))
-                            (< (prom::%sketch-index s (prom::%ordinal->double (1- (prom::%double->ordinal x)))) b))
-                 (incf bad)))
-      (is bad 0))
-    (ok (eq (prom::ddsketch-reps (prom:make-ddsketch)) (prom::ddsketch-reps (prom:make-ddsketch)))
-        "tables are shared"))
+  (subtest "Bucket values are shared"
+    (ok (eq (prom::ddsketch-reps (prom:make-ddsketch)) (prom::ddsketch-reps (prom:make-ddsketch)))))
 
   (subtest "Empty"
     (let ((s (prom:make-ddsketch)))
@@ -158,6 +155,12 @@
   (is (prom::%quota-cpus "max" "100000") nil)
   (is (prom::%quota-cpus "-1" "100000") nil)
   (ok (<= 1 (prom::detect-cpu-count)) "cpu count")
+  (is (prom::%cgroup-dirs "/sys/fs/cgroup" "/a/b") '("/sys/fs/cgroup/a/b" "/sys/fs/cgroup/a" "/sys/fs/cgroup")
+      :test #'equal)
+  (is (prom::%cgroup-dirs "/sys/fs/cgroup" "/") '("/sys/fs/cgroup") :test #'equal)
+  ;; sparse affinity spreads over dense slots
+  (let ((slots (prom::make-cpu-slots '(0 4 8 12))))
+    (is (loop for cpu in '(0 4 8 12) collect (logand (aref slots cpu) 3)) '(0 1 2 3) :test #'equal))
   (let ((s (prom:make-sharded-ddsketch :shards 16))
         (reference (prom:make-ddsketch)))
     (is (prom:sharded-ddsketch-count s) 0)

@@ -44,20 +44,30 @@ up. NIL for no quota: \"max\" in v2, -1 in v1."
         (p (and period (ignore-errors (parse-integer period)))))
     (and q p (plusp q) (plusp p) (ceiling q p))))
 
+(defun %cgroup-dirs (root path)
+  "ROOT/PATH and each of its ancestors up to ROOT, leaf first."
+  (let ((dirs (list root)) (prefix root))
+    (dolist (part (%words (or path "") '(#\/)) dirs)
+      (setf prefix (format nil "~a/~a" prefix part))
+      (push prefix dirs))))
+
 (defun detect-cpu-quota ()
-  "CPUs the cgroup CPU quota allows, rounded up, or NIL without a quota.
-Checks this process's cgroup, then the root a container sees."
+  "CPUs the tightest cgroup CPU quota on this process's cgroup or its
+ancestors allows, rounded up, or NIL without one."
   (destructuring-bind (v2 . v1) (%cgroup-paths)
-    (flet ((quota (quota period) (%quota-cpus quota period)))
-      (or (loop for dir in (remove nil (list (and v2 (format nil "/sys/fs/cgroup~a" v2)) "/sys/fs/cgroup"))
-                for words = (%words (or (%read-file-line (format nil "~a/cpu.max" dir)) ""))
-                thereis (and (= 2 (length words)) (quota (first words) (second words))))
-          (loop for dir in (remove nil (list (and v1 (format nil "/sys/fs/cgroup/cpu~a" v1)) "/sys/fs/cgroup/cpu"))
-                thereis (quota (%read-file-line (format nil "~a/cpu.cfs_quota_us" dir))
-                               (%read-file-line (format nil "~a/cpu.cfs_period_us" dir))))))))
+    (let ((quotas
+            (append
+             (loop for dir in (%cgroup-dirs "/sys/fs/cgroup" v2)
+                   for words = (%words (or (%read-file-line (format nil "~a/cpu.max" dir)) ""))
+                   collect (and (= 2 (length words)) (%quota-cpus (first words) (second words))))
+             (loop for dir in (%cgroup-dirs "/sys/fs/cgroup/cpu" v1)
+                   collect (%quota-cpus (%read-file-line (format nil "~a/cpu.cfs_quota_us" dir))
+                                        (%read-file-line (format nil "~a/cpu.cfs_period_us" dir)))))))
+      (let ((found (remove nil quotas)))
+        (and found (reduce #'min found))))))
 
 (defun detect-affinity-cpus ()
-  "CPUs this process may run on, or NIL when unknown."
+  "IDs of the CPUs this process may run on, ascending, or NIL when unknown."
   #+(and sbcl linux)
   (sb-alien:with-alien ((mask (array (sb-alien:unsigned 8) 128)))
     (when (zerop (sb-alien:alien-funcall
@@ -65,8 +75,9 @@ Checks this process's cgroup, then the root a container sees."
                                          (function sb-alien:int sb-alien:int sb-alien:unsigned-long
                                                    (* (array (sb-alien:unsigned 8) 128))))
                   0 128 (sb-alien:addr mask)))
-      (let ((n (loop for i below 128 sum (logcount (sb-alien:deref mask i)))))
-        (and (plusp n) n))))
+      (loop for cpu below 1024
+            when (logbitp (mod cpu 8) (sb-alien:deref mask (floor cpu 8)))
+              collect cpu)))
   #-(and sbcl linux) nil)
 
 (defun detect-cpu-count ()
@@ -81,7 +92,7 @@ by its host."
             (if (plusp n) n 16))
           #-(and sbcl linux) 16))
     (max 1 (min configured
-                (or (detect-affinity-cpus) configured)
+                (or (length (detect-affinity-cpus)) configured)
                 (or (detect-cpu-quota) configured)))))
 
 (defun round-up-shards (n)
@@ -109,18 +120,37 @@ by its host."
 
 (defvar *default-shards* nil
   "Shards per series for sharded metrics, a power of two in [1, 1024].
-NIL means one per configured CPU, rounded up to a power of two.")
+NIL means one per CPU the process can use, rounded up to a power of two.")
 
 (defun default-shards ()
   (or *default-shards* *detected-shards*))
 
+(deftype cpu-slots () '(simple-array (unsigned-byte 10) (1024)))
+
+(defun make-cpu-slots (cpus)
+  "CPU id -> shard slot. The CPUS a process may use get dense slots, so a
+sparse set like {0, 4, 8, 12} still spreads over 4 shards. Others keep
+their id."
+  (let ((slots (make-array 1024 :element-type '(unsigned-byte 10))))
+    (dotimes (i 1024) (setf (aref slots i) i))
+    (loop for cpu in cpus for slot from 0
+          do (setf (aref slots cpu) (logand slot 1023)))
+    slots))
+
+#+sbcl (sb-ext:defglobal **cpu-slots** nil)
+#+sbcl (setf **cpu-slots** (make-cpu-slots (detect-affinity-cpus)))
+#+sbcl (pushnew (lambda () (setf **cpu-slots** (make-cpu-slots (detect-affinity-cpus))))
+                sb-ext:*init-hooks*)
+
 (declaim (inline %current-shard-index))
 (defun %current-shard-index (mask)
   (declare (type (unsigned-byte 10) mask))
-  ;; sched_getcpu returns -1 on failure, which still lands in range
   #+(and sbcl linux)
-  (logand (sb-alien:alien-funcall
-           (sb-alien:extern-alien "sched_getcpu" (function sb-alien:int)))
+  (logand (aref (the cpu-slots **cpu-slots**)
+                ;; sched_getcpu returns -1 on failure, which still lands in range
+                (logand (sb-alien:alien-funcall
+                         (sb-alien:extern-alien "sched_getcpu" (function sb-alien:int)))
+                        1023))
           mask)
   #+(and sbcl (not linux))
   (logand (sb-thread:thread-os-tid sb-thread:*current-thread*) mask)
