@@ -10,13 +10,79 @@
   (unless (and (typep shards '(integer 1 1024)) (= 1 (logcount shards)))
     (error 'invalid-value-error :value shards :reason "shards should be a power of two in [1, 1024]")))
 
-(defun detect-cpu-count ()
+(defun %read-file-line (path)
+  (ignore-errors (with-open-file (in path :if-does-not-exist nil)
+                   (and in (read-line in nil)))))
+
+(defun %words (line &optional (separators '(#\Space #\Tab)))
+  (let ((words '()) (start nil))
+    (loop for i from 0 to (length line)
+          for c = (if (< i (length line)) (char line i) (first separators))
+          do (cond ((member c separators) (when start (push (subseq line start i) words) (setf start nil)))
+                   ((null start) (setf start i))))
+    (nreverse words)))
+
+(defun %cgroup-paths ()
+  "(V2-PATH . V1-CPU-PATH) of this process from /proc/self/cgroup."
+  (let ((v2 nil) (v1 nil))
+    (ignore-errors
+     (with-open-file (in "/proc/self/cgroup" :if-does-not-exist nil)
+       (when in
+         (loop for line = (read-line in nil) while line
+               do (let* ((a (position #\: line)) (b (and a (position #\: line :start (1+ a)))))
+                    (when b
+                      (let ((controllers (subseq line (1+ a) b)) (path (subseq line (1+ b))))
+                        (cond ((string= controllers "") (setf v2 path))
+                              ((member "cpu" (%words controllers '(#\,)) :test #'string=)
+                               (setf v1 path))))))))))
+    (cons v2 v1)))
+
+(defun %quota-cpus (quota period)
+  "CPUs a QUOTA per PERIOD (strings, as cgroups write them) allows, rounded
+up. NIL for no quota: \"max\" in v2, -1 in v1."
+  (let ((q (and quota (ignore-errors (parse-integer quota))))
+        (p (and period (ignore-errors (parse-integer period)))))
+    (and q p (plusp q) (plusp p) (ceiling q p))))
+
+(defun detect-cpu-quota ()
+  "CPUs the cgroup CPU quota allows, rounded up, or NIL without a quota.
+Checks this process's cgroup, then the root a container sees."
+  (destructuring-bind (v2 . v1) (%cgroup-paths)
+    (flet ((quota (quota period) (%quota-cpus quota period)))
+      (or (loop for dir in (remove nil (list (and v2 (format nil "/sys/fs/cgroup~a" v2)) "/sys/fs/cgroup"))
+                for words = (%words (or (%read-file-line (format nil "~a/cpu.max" dir)) ""))
+                thereis (and (= 2 (length words)) (quota (first words) (second words))))
+          (loop for dir in (remove nil (list (and v1 (format nil "/sys/fs/cgroup/cpu~a" v1)) "/sys/fs/cgroup/cpu"))
+                thereis (quota (%read-file-line (format nil "~a/cpu.cfs_quota_us" dir))
+                               (%read-file-line (format nil "~a/cpu.cfs_period_us" dir))))))))
+
+(defun detect-affinity-cpus ()
+  "CPUs this process may run on, or NIL when unknown."
   #+(and sbcl linux)
-  (let ((n (sb-alien:alien-funcall
-            (sb-alien:extern-alien "sysconf" (function sb-alien:long sb-alien:int))
-            83)))                       ; _SC_NPROCESSORS_CONF
-    (if (plusp n) n 16))
-  #-(and sbcl linux) 16)
+  (sb-alien:with-alien ((mask (array (sb-alien:unsigned 8) 128)))
+    (when (zerop (sb-alien:alien-funcall
+                  (sb-alien:extern-alien "sched_getaffinity"
+                                         (function sb-alien:int sb-alien:int sb-alien:unsigned-long
+                                                   (* (array (sb-alien:unsigned 8) 128))))
+                  0 128 (sb-alien:addr mask)))
+      (let ((n (loop for i below 128 sum (logcount (sb-alien:deref mask i)))))
+        (and (plusp n) n))))
+  #-(and sbcl linux) nil)
+
+(defun detect-cpu-count ()
+  "CPUs this process can use at once: configured CPUs, narrowed by CPU
+affinity (cpusets) and the cgroup CPU quota, so a container is not sized
+by its host."
+  (let ((configured
+          #+(and sbcl linux)
+          (let ((n (sb-alien:alien-funcall
+                    (sb-alien:extern-alien "sysconf" (function sb-alien:long sb-alien:int))
+                    83)))               ; _SC_NPROCESSORS_CONF
+            (if (plusp n) n 16))
+          #-(and sbcl linux) 16))
+    (max 1 (min configured
+                (or (detect-affinity-cpus) configured)
+                (or (detect-cpu-quota) configured)))))
 
 (defun round-up-shards (n)
   (min 1024 (ash 1 (integer-length (1- (max 1 n))))))

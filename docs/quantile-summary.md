@@ -6,6 +6,8 @@
 
 Value `v` goes to bucket `ceiling(log_gamma v)`, `gamma = (1 + a) / (1 - a)`. Each bucket is reported as `2 gamma^k / (gamma + 1)`, within `a` of every value in it. Counters are dense and preallocated over `[min-value, max-value]`. Below the range (including zero) goes to an underflow counter. Above it goes to an overflow counter. Exact min and max are tracked, and estimates are clamped to them.
 
+Bucket values and bucket floors (the smallest double observe puts in each bucket, found by search so they agree with it exactly) are computed once per parameter set and shared. Reads look them up instead of calling `exp`. Relative error is limited to `1e-6` and above, below that rounding in `log` becomes a visible part of the error.
+
 Difference from ddskerl - ddskerl indexes only values above 1 and puts all of `(0, 1]` in one bucket. That loses sub-second latencies, so here the range is configurable and defaults to `1e-9 .. 1e9`.
 
 Sketches with the same parameters merge by adding counters, with the same error bound as one sketch that saw every value. CKMS (`make-summary`) cannot do this.
@@ -25,7 +27,7 @@ What that guarantees:
 - a bucket's count and sum change together, so a read or merge never sees one without the other
 - extrema are written before the count, so a counted observation always has real extrema (an empty sketch holds placeholders: min is the largest double, max is 0)
 - a merge from a sketch that is still being written reads each bucket in one step, and may leave out observations that land during the merge
-- extrema read with the buckets may already include observations whose counts were missed, so reads bound them by the edges of the lowest and highest non-empty bucket they saw
+- extrema are written before counts, so a read may see the min or max of an observation it did not count. When that value lies outside the lowest or highest counted bucket, the read reports that bucket's value, within `a` of what was counted. A value caught mid-write in the same bucket is reported as is, at most one bucket width away
 
 Counts are doubles, exact up to 2^53, so the whole array is uniform and a pair is two lanes of one SSE register. Guards of one cache line (measured at load) keep other objects off the lines being written.
 
@@ -35,7 +37,7 @@ A standalone `ddsketch` has one writer or none. It is either a shard, read only 
 
 ## Memory
 
-Fixed at creation. With the defaults a sketch is about 2100 buckets, two doubles each, so 34KB. A series has `shards` sketches, all allocated with the series. The default is one per configured CPU rounded up to a power of two, so about 135KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range. Parameters are limited to 65536 buckets per sketch.
+Fixed at creation. With the defaults a sketch is about 2100 buckets, two doubles each, so 34KB. A series has `shards` sketches, all allocated with the series. The default is one per CPU the process can use (configured CPUs narrowed by affinity and the cgroup CPU quota, so a container is not sized by its host), rounded up to a power of two, so about 135KB per series on 4 CPUs. For high-cardinality families, lower `:shards` or narrow the range. Parameters are limited to 65536 buckets per sketch.
 
 Nothing is allocated on the hot paths:
 

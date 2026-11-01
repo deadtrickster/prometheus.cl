@@ -23,16 +23,19 @@
   (subtest "Parameter limits"
     (is-error (prom:make-ddsketch :relative-error 1d-20) prom:invalid-value-error
               "gamma rounds to 1")
+    (is-error (prom:make-ddsketch :relative-error 1d-15 :min-value 1d0 :max-value 1.000000000001d0)
+              prom:invalid-value-error
+              "below what rounding in LOG allows")
     (is-error (prom:make-ddsketch :relative-error 1d-6) prom:invalid-value-error
               "too many buckets")
     (is-error (prom:make-ddsketch :relative-error (- 1 (expt 10 -20))) prom:invalid-value-error
               "alpha rounds to 1")
     ;; gamma near 2^40: gamma^key alone overflows for the top bucket
     (let* ((s (prom:make-ddsketch :relative-error (- 1d0 (expt 2d0 -40)) :min-value 1d-299 :max-value 9d299))
-           (top (prom::%sketch-bucket-value s (- (prom::ddsketch-buckets s) 2))))
+           (top (aref (prom::ddsketch-reps s) (- (prom::ddsketch-buckets s) 2))))
       (ok (< 0d0 top most-positive-double-float) "top bucket value is finite"))
     ;; few buckets but keys far from zero: observing must not hit a type error
-    (let ((s (prom:make-ddsketch :relative-error 1d-8 :min-value 1d-9 :max-value 1.00001d-9)))
+    (let ((s (prom:make-ddsketch :relative-error 1d-6 :min-value 1d-9 :max-value 1.00001d-9)))
       (prom:ddsketch-observe s 1d-9)
       (prom:ddsketch-observe s 1.000005d-9)
       (is (prom:ddsketch-count s) 2)))
@@ -47,7 +50,35 @@
       (setf (aref data m) 1d-6
             (aref data (1+ m)) 1d6)
       (ok (within-relative-error-p (prom:ddsketch-quantile s 0) 100d0 0.01d0) "q=0")
-      (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 200d0 0.01d0) "q=1")))
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 200d0 0.01d0) "q=1"))
+    ;; one bucket below and above: the counted bucket's value, within alpha
+    (let* ((s (prom:make-ddsketch))
+           (data (prom::ddsketch-data s))
+           (m (* 2 (prom::ddsketch-base s))))
+      (prom:ddsketch-observe s 1d0)
+      (setf (aref data m) 0.979d0
+            (aref data (1+ m)) 1.021d0)
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 0) 1d0 0.01d0) "q=0, one bucket below")
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 1d0 0.01d0) "q=1, one bucket above"))
+    ;; a quiet sketch keeps its exact extrema
+    (let ((s (prom:make-ddsketch)))
+      (prom:ddsketch-observe s 0.995d0)
+      (prom:ddsketch-observe s 1.005d0)
+      (is (prom:ddsketch-quantile s 0) 0.995d0)
+      (is (prom:ddsketch-quantile s 1) 1.005d0)))
+
+  (subtest "Bucket floors agree with observe"
+    (let* ((s (prom:make-ddsketch))
+           (floors (prom::ddsketch-floors s))
+           (bad 0))
+      (loop for b from 1 below (length floors)
+            for x = (aref floors b)
+            do (unless (and (= b (prom::%sketch-index s x))
+                            (< (prom::%sketch-index s (prom::%ordinal->double (1- (prom::%double->ordinal x)))) b))
+                 (incf bad)))
+      (is bad 0))
+    (ok (eq (prom::ddsketch-reps (prom:make-ddsketch)) (prom::ddsketch-reps (prom:make-ddsketch)))
+        "tables are shared"))
 
   (subtest "Empty"
     (let ((s (prom:make-ddsketch)))
@@ -122,6 +153,11 @@
 
 (subtest "Sharded DDSketch"
   (is-error (prom:make-sharded-ddsketch :shards 3) prom:invalid-value-error)
+  ;; cgroup quotas, v2 "max" and v1 -1 mean none
+  (is (prom::%quota-cpus "150000" "100000") 2)
+  (is (prom::%quota-cpus "max" "100000") nil)
+  (is (prom::%quota-cpus "-1" "100000") nil)
+  (ok (<= 1 (prom::detect-cpu-count)) "cpu count")
   (let ((s (prom:make-sharded-ddsketch :shards 16))
         (reference (prom:make-ddsketch)))
     (is (prom:sharded-ddsketch-count s) 0)
@@ -223,14 +259,15 @@
            (writers (loop repeat 4
                           collect (bt:make-thread (lambda () (loop until stop do (prom:summary.observe m 2d0))))))
            (bad 0))
-      (dotimes (i 200)
-        (prom:with-quantile-summary-read (qs estimates count sum) m
-          (declare (ignore qs) (type unsigned-byte count))
-          (unless (and (= sum (* 2d0 count))
-                       (or (zerop count) (= (aref estimates 0) 2d0)))
-            (incf bad))))
-      (setf stop t)
-      (mapc #'bt:join-thread writers)
+      (unwind-protect
+           (dotimes (i 200)
+             (prom:with-quantile-summary-read (qs estimates count sum) m
+               (declare (ignore qs) (type unsigned-byte count))
+               (unless (and (= sum (* 2d0 count))
+                            (or (zerop count) (= (aref estimates 0) 2d0)))
+                 (incf bad))))
+        (setf stop t)
+        (mapc #'bt:join-thread writers))
       (is bad 0)))
 
   (subtest "A snapshot never splits count from sum"
@@ -240,12 +277,13 @@
                           collect (bt:make-thread (lambda () (loop until stop do (prom:sharded-ddsketch-observe s 2d0))))))
            (target (prom:ddsketch-empty-copy (svref (prom::sharded-ddsketch-shards s) 0)))
            (bad 0))
-      (dotimes (i 200)
-        (prom:sharded-ddsketch-snapshot s target)
-        (unless (= (prom:ddsketch-sum target) (* 2d0 (prom:ddsketch-count target)))
-          (incf bad)))
-      (setf stop t)
-      (mapc #'bt:join-thread writers)
+      (unwind-protect
+           (dotimes (i 200)
+             (prom:sharded-ddsketch-snapshot s target)
+             (unless (= (prom:ddsketch-sum target) (* 2d0 (prom:ddsketch-count target)))
+               (incf bad)))
+        (setf stop t)
+        (mapc #'bt:join-thread writers))
       (is bad 0)))
 
   (subtest "A snapshot into a sketch with another layout"

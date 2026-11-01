@@ -30,8 +30,6 @@ Concurrent observes and reads go through SHARDED-DDSKETCH."
   (gamma 0d0 :type double-float :read-only t)
   (log-gamma 0d0 :type double-float :read-only t)
   (inv-log-gamma 0d0 :type double-float :read-only t)
-  ;; log(2/(gamma+1)): a bucket's value is exp(key * log-gamma + log-mid)
-  (log-mid 0d0 :type double-float :read-only t)
   (min-value 0d0 :type double-float :read-only t)
   (max-value 0d0 :type double-float :read-only t)
   ;; key of bucket 1
@@ -42,6 +40,10 @@ Concurrent observes and reads go through SHARDED-DDSKETCH."
   (key-hi 0d0 :type double-float :read-only t)
   ;; pair index of (min max); bucket B is pair BASE + 1 + B
   (base 0 :type (integer 0 (512)) :read-only t)
+  ;; per bucket, shared by sketches with the same parameters: the value
+  ;; reported for it, and the smallest double observe puts in it
+  (reps (make-array 0 :element-type 'double-float) :type sketch-data :read-only t)
+  (floors (make-array 0 :element-type 'double-float) :type sketch-data :read-only t)
   (data (make-array 0 :element-type 'double-float) :type sketch-data :read-only t)
   (lock (bt:make-lock "prometheus ddsketch lock") :read-only t))
 
@@ -74,8 +76,15 @@ target; not atomic with respect to concurrent observations."
             (aref data (1+ m)) 0d0)))
   sketch)
 
+(defun %no-doubles () (make-array 0 :element-type 'double-float))
+
 (defun %sketch-key (inv-log-gamma value)
   (ceiling (* (log (coerce value 'double-float)) inv-log-gamma)))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; key = ceil(log(v) / log(gamma)) is off by up to ~1.5d-13 / alpha of a
+  ;; bucket from rounding in LOG; above this that stays negligible
+  (defconstant +sketch-min-relative-error+ 1d-6))
 
 (defun %sketch-geometry (relative-error min-value max-value)
   "Validate the parameters and return gamma, 1/log(gamma), and the keys of
@@ -92,10 +101,10 @@ MIN-VALUE and MAX-VALUE."
       ;; a rational just below 1 rounds to 1d0
       (unless (< alpha 1d0)
         (fail relative-error "relative error too close to 1 for double precision"))
+      (unless (>= alpha +sketch-min-relative-error+)
+        (fail relative-error (format nil "relative error below ~a, rounding would exceed it"
+                                     +sketch-min-relative-error+)))
       (let ((gamma (/ (+ 1 alpha) (- 1 alpha))))
-        ;; a tiny alpha rounds gamma to 1: zero-width buckets
-        (unless (> gamma 1d0)
-          (fail relative-error "relative error too small for double precision"))
         (let* ((inv-log-gamma (/ 1 (log gamma)))
                (min-key (%sketch-key inv-log-gamma min-value))
                (max-key (%sketch-key inv-log-gamma max-value)))
@@ -124,20 +133,24 @@ fixed at creation: two doubles per bucket, about log(MAX-VALUE/MIN-VALUE) /
            (guard (max 2 (* 2 (ceiling *cache-line-bytes* 16))))
            (data (make-array (+ guard 2 (* 2 buckets) guard)
                              :element-type 'double-float :initial-element 0d0)))
-      (ddsketch-reset
-       (%make-ddsketch :relative-error (coerce relative-error 'double-float)
-                       :gamma gamma
-                       :log-gamma (log gamma)
-                       :inv-log-gamma inv-log-gamma
-                       :log-mid (log (/ 2 (+ gamma 1)))
-                       :min-value (coerce min-value 'double-float)
-                       :max-value (coerce max-value 'double-float)
-                       :min-key min-key
-                       :buckets buckets
-                       :key-lo (coerce (1- min-key) 'double-float)
-                       :key-hi (coerce (1+ max-key) 'double-float)
-                       :base (floor guard 2)
-                       :data data)))))
+      (flet ((make (reps floors data)
+               (%make-ddsketch :relative-error (coerce relative-error 'double-float)
+                               :gamma gamma
+                               :log-gamma (log gamma)
+                               :inv-log-gamma inv-log-gamma
+                               :min-value (coerce min-value 'double-float)
+                               :max-value (coerce max-value 'double-float)
+                               :min-key min-key
+                               :buckets buckets
+                               :key-lo (coerce (1- min-key) 'double-float)
+                               :key-hi (coerce (1+ max-key) 'double-float)
+                               :base (floor guard 2)
+                               :reps reps
+                               :floors floors
+                               :data data)))
+        ;; the tables are built from a sketch without them
+        (multiple-value-bind (reps floors) (%sketch-tables (make (%no-doubles) (%no-doubles) (%no-doubles)))
+          (ddsketch-reset (make reps floors data)))))))
 
 (defun %same-layout-p (a b)
   "Pairs sit at the same indices: the guard follows the cache line size at
@@ -274,45 +287,71 @@ it may include an observation not counted yet."
   "Largest observation, or NIL when empty."
   (unless (zerop (%sketch-total sketch)) (%sketch-max sketch)))
 
-(declaim (inline %sketch-exp))
-(defun %sketch-exp (sketch key offset)
-  "exp(KEY * log(gamma) + OFFSET), clamped to finite doubles."
-  (declare (type ddsketch sketch) (type fixnum key) (type double-float offset))
-  ;; |KEY * log-gamma| stays below ~730 for a validated sketch
-  (let ((x (+ (* (coerce key 'double-float) (ddsketch-log-gamma sketch)) offset)))
-    (exp (the (double-float -745d0 709d0) (max -745d0 (min 709d0 x))))))
+(defun %double->ordinal (x)
+  "Position of X, a positive normal double, in the ordered doubles."
+  (multiple-value-bind (significand exponent) (integer-decode-float x)
+    (+ (* (+ exponent 1075) (expt 2 52)) (- significand (expt 2 52)))))
 
-(declaim (inline %sketch-bucket-value))
-(defun %sketch-bucket-value (sketch bucket)
-  "2 gamma^key / (gamma + 1), computed in log space so nothing overflows."
-  (declare (type ddsketch sketch) (type fixnum bucket))
-  (let ((last (1- (ddsketch-buckets sketch))))
-    (cond ((= bucket 0) (ddsketch-min-value sketch))
-          ((= bucket last) (ddsketch-max-value sketch))
-          (t (%sketch-exp sketch (+ (ddsketch-min-key sketch) (1- bucket))
-                          (ddsketch-log-mid sketch))))))
+(defun %ordinal->double (n)
+  (multiple-value-bind (e m) (floor n (expt 2 52))
+    (scale-float (coerce (+ m (expt 2 52)) 'double-float) (- e 1075))))
 
-;; slack against rounding in LOG when the key was computed
-(defconstant +edge-slack+ 1d-12)
+(defun %bucket-floor (proto bucket)
+  "Smallest double that %SKETCH-INDEX puts in BUCKET or above, so it agrees
+with observe exactly. Searched around gamma^(key-1)."
+  (let* ((last (1- (ddsketch-buckets proto)))
+         (guess (%double->ordinal
+                 (cond ((= bucket 1) (ddsketch-min-value proto))
+                       ((= bucket last) (ddsketch-max-value proto))
+                       (t (exp (* (+ (ddsketch-min-key proto) bucket -2) (ddsketch-log-gamma proto)))))))
+         (lo nil) (hi nil))
+    (flet ((in-p (n) (>= (%sketch-index proto (%ordinal->double n)) bucket)))
+      ;; gallop to bracket: LO below the bucket, HI in it
+      (if (in-p guess)
+          (loop for step = 1 then (* 2 step)
+                do (setf hi guess guess (- guess step))
+                until (not (in-p guess))
+                finally (setf lo guess))
+          (loop for step = 1 then (* 2 step)
+                do (setf lo guess guess (+ guess step))
+                until (in-p guess)
+                finally (setf hi guess)))
+      (loop while (> (- hi lo) 1)
+            do (let ((mid (floor (+ lo hi) 2)))
+                 (if (in-p mid) (setf hi mid) (setf lo mid))))
+      (%ordinal->double hi))))
 
-(declaim (inline %bucket-lower-edge %bucket-upper-edge))
-(defun %bucket-lower-edge (sketch bucket)
-  "No value counted in BUCKET is below this."
-  (declare (type ddsketch sketch) (type fixnum bucket))
-  (let ((last (1- (ddsketch-buckets sketch))))
-    (cond ((= bucket 0) 0d0)
-          ((= bucket last) (ddsketch-max-value sketch))
-          (t (* (- 1d0 +edge-slack+)
-                (%sketch-exp sketch (+ (ddsketch-min-key sketch) (- bucket 2)) 0d0))))))
+(defun %build-sketch-tables (proto)
+  (let* ((buckets (ddsketch-buckets proto))
+         (last (1- buckets))
+         (gamma (ddsketch-gamma proto))
+         ;; 2 gamma^key / (gamma + 1), in log space so gamma^key cannot overflow
+         (log-mid (log (/ 2 (+ gamma 1))))
+         (reps (make-array buckets :element-type 'double-float :initial-element 0d0))
+         (floors (make-array buckets :element-type 'double-float :initial-element 0d0)))
+    (dotimes (b buckets)
+      (setf (aref reps b)
+            (cond ((= b 0) (ddsketch-min-value proto))
+                  ((= b last) (ddsketch-max-value proto))
+                  (t (exp (+ (* (+ (ddsketch-min-key proto) b -1) (ddsketch-log-gamma proto))
+                             log-mid)))))
+      (unless (= b 0)
+        (setf (aref floors b) (%bucket-floor proto b))))
+    (values reps floors)))
 
-(defun %bucket-upper-edge (sketch bucket)
-  "No value counted in BUCKET is above this."
-  (declare (type ddsketch sketch) (type fixnum bucket))
-  (let ((last (1- (ddsketch-buckets sketch))))
-    (cond ((= bucket 0) (ddsketch-min-value sketch))
-          ((= bucket last) most-positive-double-float)
-          (t (* (+ 1d0 +edge-slack+)
-                (%sketch-exp sketch (+ (ddsketch-min-key sketch) (1- bucket)) 0d0))))))
+(defvar *sketch-tables* (make-hash-table :test 'equal))
+(defvar *sketch-tables-lock* (bt:make-lock "prometheus ddsketch tables"))
+
+(defun %sketch-tables (proto)
+  "Bucket values and floors for PROTO's parameters, built once and shared."
+  (let ((key (list (ddsketch-relative-error proto) (ddsketch-min-value proto)
+                   (ddsketch-max-value proto))))
+    (bt:with-lock-held (*sketch-tables-lock*)
+      (destructuring-bind (reps . floors)
+          (or (gethash key *sketch-tables*)
+              (setf (gethash key *sketch-tables*)
+                    (multiple-value-call #'cons (%build-sketch-tables proto))))
+        (values reps floors)))))
 
 (defun check-quantile-buffers (qs out)
   (unless (and (typep qs 'quantile-buffer) (typep out 'quantile-buffer)
@@ -369,15 +408,25 @@ and the sum, all from the same pass over DATA."
                (incf sum (aref data (+ first (* 2 b) 1)))))
     (when (zerop total)
       (return-from %quantiles-from-data (values nil 0d0 0d0)))
-    ;; extrema may already include observations whose counts were not read:
-    ;; keep them within the buckets that were
-    (let ((min (max (aref data m) (%bucket-lower-edge proto lowest)))
-          (max (min (aref data (1+ m)) (%bucket-upper-edge proto highest)))
-          (n (length qs))
+    ;; extrema are written before counts, so they may come from an
+    ;; observation this read did not count. If one lies outside the counted
+    ;; buckets, report that bucket's value instead, within alpha of any
+    ;; counted value in it.
+    (let* ((reps (ddsketch-reps proto))
+           (floors (ddsketch-floors proto))
+           (min (let ((min (aref data m)))
+                  (if (< min (aref floors lowest)) (aref reps lowest) min)))
+           (max (let ((max (aref data (1+ m))))
+                  (if (and (< highest (1- (ddsketch-buckets proto)))
+                           (>= max (aref floors (1+ highest))))
+                      (aref reps highest)
+                      max)))
+           (n (length qs))
           (qi 0)
           (seen 0d0)
           (last-rank (- total 1d0)))
-      (declare (type double-float min max seen last-rank) (type fixnum n qi))
+      (declare (type sketch-data reps floors) (type double-float min max seen last-rank)
+               (type fixnum n qi))
       (when (> min max) (setf min max))
       (loop while (and (< qi n) (<= (aref qs qi) 0d0))
             do (setf (aref out qi) min) (incf qi))
@@ -388,7 +437,7 @@ and the sum, all from the same pass over DATA."
         (loop while (and (< qi n)
                          (< (aref qs qi) 1d0)
                          (> seen (* (aref qs qi) last-rank)))
-              do (let ((estimate (%sketch-bucket-value proto bucket)))
+              do (let ((estimate (aref reps bucket)))
                    (setf (aref out qi) (cond ((< estimate min) min)
                                              ((> estimate max) max)
                                              (t estimate))))
