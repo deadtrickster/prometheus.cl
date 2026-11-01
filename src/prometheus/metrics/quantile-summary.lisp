@@ -74,16 +74,22 @@ WITH-QUANTILE-SUMMARY-READ."
 so they describe the same observations, while holding the metric's lock.
 ESTIMATES is the scrape buffer and only meaningful when COUNT is positive.
 Allocates nothing; meant for exposition code."
-  (let ((m (gensym "METRIC")) (total (gensym "TOTAL")))
+  (let ((m (gensym "METRIC")) (qs (gensym "QS")) (out (gensym "OUT"))
+        (total (gensym "TOTAL")) (s (gensym "SUM")))
     `(let ((,m ,metric))
        (synchronize ,m
-         (let ((,quantiles (quantile-summary-metric-quantiles ,m))
-               (,estimates (quantile-summary-metric-estimates ,m)))
+         (let ((,qs (quantile-summary-metric-quantiles ,m))
+               (,out (quantile-summary-metric-estimates ,m)))
            ;; typed, so the body's AREFs are not generic calls
-           (declare (type quantile-buffer ,quantiles ,estimates))
-           (%with-sharded-read (,(gensym "OBSERVED") ,total ,sum)
-               ((quantile-summary-sharded-sketch ,m) ,quantiles ,estimates)
-             (let ((,count (%count->integer ,total)))
+           (declare (type quantile-buffer ,qs ,out))
+           (%with-sharded-read (,(gensym "OBSERVED") ,total ,s)
+               ((quantile-summary-sharded-sketch ,m) ,qs ,out)
+             ;; all four in one LET, so BODY may declare any of them
+             (let ((,quantiles ,qs)
+                   (,estimates ,out)
+                   (,count (%count->integer ,total))
+                   (,sum ,s))
+               (declare (type quantile-buffer ,quantiles ,estimates))
                ,@body)))))))
 
 (defmacro with-quantile-summary-estimates ((quantiles estimates) metric &body body)
@@ -93,7 +99,7 @@ when nothing has been observed."
     `(with-quantile-summary-read (,quantiles ,estimates ,count ,sum) ,metric
        (declare (ignore ,sum))
        (when (plusp ,count)
-         ,@body))))
+         (locally ,@body)))))
 
 (defmethod summary-quantiles ((summary quantile-summary-metric))
   "Alist of (quantile . estimate); empty until something is observed.

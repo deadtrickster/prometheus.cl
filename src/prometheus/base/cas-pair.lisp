@@ -2,7 +2,8 @@
 
 ;;; 16-byte CAS and load on two adjacent elements of a 64-bit specialized
 ;;; vector. SBCL only exposes a pair CAS for SIMPLE-VECTOR. Other platforms
-;;; use a lock instead, see %WITH-SKETCH-LOCKED.
+;;; use a lock instead, see %WITH-SKETCH-LOCKED. Vector args stay live to the
+;;; end, so the object is held in a register while RSI/RDI point inside it.
 
 #+(and sbcl x86-64)
 (progn
@@ -18,7 +19,7 @@
   (sb-c:define-vop (%cas-pair)
     (:translate %cas-pair)
     (:policy :fast-safe)
-    (:args (v :scs (sb-vm::descriptor-reg))
+    (:args (v :scs (sb-vm::descriptor-reg) :to :result)
            (i :scs (sb-vm::unsigned-reg))
            (o1 :scs (sb-vm::unsigned-reg) :target rax)
            (o2 :scs (sb-vm::unsigned-reg) :target rdx)
@@ -56,7 +57,7 @@
   (sb-c:define-vop (%load-pair)
     (:translate %load-pair)
     (:policy :fast-safe)
-    (:args (v :scs (sb-vm::descriptor-reg))
+    (:args (v :scs (sb-vm::descriptor-reg) :to :result)
            (i :scs (sb-vm::unsigned-reg)))
     (:arg-types * sb-vm::unsigned-num)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from :load) rsi)
@@ -85,9 +86,9 @@
   (sb-c:define-vop (%pair-add)
     (:translate %pair-add)
     (:policy :fast-safe)
-    (:args (dst :scs (sb-vm::descriptor-reg))
+    (:args (dst :scs (sb-vm::descriptor-reg) :to :result)
            (di :scs (sb-vm::unsigned-reg))
-           (src :scs (sb-vm::descriptor-reg))
+           (src :scs (sb-vm::descriptor-reg) :to :result)
            (si :scs (sb-vm::unsigned-reg)))
     (:arg-types * sb-vm::unsigned-num * sb-vm::unsigned-num)
     (:temporary (:sc sb-vm::unsigned-reg :offset sb-vm::rsi-offset :from :load) rsi)

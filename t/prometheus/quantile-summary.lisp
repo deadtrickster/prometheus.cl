@@ -25,11 +25,29 @@
               "gamma rounds to 1")
     (is-error (prom:make-ddsketch :relative-error 1d-6) prom:invalid-value-error
               "too many buckets")
+    (is-error (prom:make-ddsketch :relative-error (- 1 (expt 10 -20))) prom:invalid-value-error
+              "alpha rounds to 1")
+    ;; gamma near 2^40: gamma^key alone overflows for the top bucket
+    (let* ((s (prom:make-ddsketch :relative-error (- 1d0 (expt 2d0 -40)) :min-value 1d-299 :max-value 9d299))
+           (top (prom::%sketch-bucket-value s (- (prom::ddsketch-buckets s) 2))))
+      (ok (< 0d0 top most-positive-double-float) "top bucket value is finite"))
     ;; few buckets but keys far from zero: observing must not hit a type error
     (let ((s (prom:make-ddsketch :relative-error 1d-8 :min-value 1d-9 :max-value 1.00001d-9)))
       (prom:ddsketch-observe s 1d-9)
       (prom:ddsketch-observe s 1.000005d-9)
       (is (prom:ddsketch-count s) 2)))
+
+  (subtest "Extrema stay within the counted buckets"
+    ;; as if two more observations wrote their extrema but not yet their counts
+    (let* ((s (prom:make-ddsketch))
+           (data (prom::ddsketch-data s))
+           (m (* 2 (prom::ddsketch-base s))))
+      (prom:ddsketch-observe s 100d0)
+      (prom:ddsketch-observe s 200d0)
+      (setf (aref data m) 1d-6
+            (aref data (1+ m)) 1d6)
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 0) 100d0 0.01d0) "q=0")
+      (ok (within-relative-error-p (prom:ddsketch-quantile s 1) 200d0 0.01d0) "q=1")))
 
   (subtest "Empty"
     (let ((s (prom:make-ddsketch)))
@@ -153,7 +171,7 @@
           "summary.observe on a series")
       (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-quantiles-into sharded qs out)))) 0
           "sharded-ddsketch-quantiles-into")
-      (is (consed (lambda () (dotimes (r 5000) (prom:with-quantile-summary-estimates (q e) metric (> (aref e 0) (aref q 0)))))) 0
+      (is (consed (lambda () (dotimes (r 5000) (prom:with-quantile-summary-estimates (q e) metric (declare (type (simple-array double-float (*)) e)) (> (aref e 0) (aref q 0)))))) 0
           "with-quantile-summary-estimates")
       (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-snapshot sharded target)))) 0
           "snapshot into a reused sketch"))))
@@ -207,7 +225,7 @@
            (bad 0))
       (dotimes (i 200)
         (prom:with-quantile-summary-read (qs estimates count sum) m
-          (declare (ignore qs))
+          (declare (ignore qs) (type unsigned-byte count))
           (unless (and (= sum (* 2d0 count))
                        (or (zerop count) (= (aref estimates 0) 2d0)))
             (incf bad))))
@@ -228,7 +246,17 @@
           (incf bad)))
       (setf stop t)
       (mapc #'bt:join-thread writers)
-      (is bad 0))))
+      (is bad 0)))
+
+  (subtest "A snapshot into a sketch with another layout"
+    (let* ((s (prom:make-sharded-ddsketch))
+           (target (let ((prom::*cache-line-bytes* (* 4 prom::*cache-line-bytes*)))
+                     (prom:make-ddsketch))))
+      (loop for v from 1 to 1000 do (prom:sharded-ddsketch-observe s v))
+      (prom:sharded-ddsketch-snapshot s target)
+      (is (prom:ddsketch-count target) 1000)
+      (is (prom:ddsketch-sum target) 500500d0)
+      (is (prom:ddsketch-quantile target 1) 1000d0))))
 
 (subtest "Quantile Summary"
   (subtest "Errors & Validations"

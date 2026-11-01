@@ -25,10 +25,13 @@ What that guarantees:
 - a bucket's count and sum change together, so a read or merge never sees one without the other
 - extrema are written before the count, so a counted observation always has real extrema (an empty sketch holds placeholders: min is the largest double, max is 0)
 - a merge from a sketch that is still being written reads each bucket in one step, and may leave out observations that land during the merge
+- extrema read with the buckets may already include observations whose counts were missed, so reads bound them by the edges of the lowest and highest non-empty bucket they saw
 
 Counts are doubles, exact up to 2^53, so the whole array is uniform and a pair is two lanes of one SSE register. Guards of one cache line (measured at load) keep other objects off the lines being written.
 
 Reads merge the shards into a buffer the sharded sketch owns, one pair at a time: `movdqa` from the shard, `addpd` into the buffer, `movdqa` back, the same three instructions for every bucket. Intel (SDM 9.1.1) and AMD (APM 7.3.2) guarantee an aligned 16-byte `movdqa` is atomic on CPUs with AVX, so each pair is read in one step. On CPUs without AVX the merge reads pairs with the CAS instead. 32-byte loads have no such guarantee, which is why the merge stays at 16 bytes. Quantiles then walk the one buffer; a snapshot merges straight into the target.
+
+A standalone `ddsketch` has one writer or none. It is either a shard, read only through the merge, or a merge target or snapshot read once nobody writes it. Concurrent observes and reads go through `sharded-ddsketch`.
 
 ## Memory
 

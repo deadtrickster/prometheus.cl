@@ -24,9 +24,14 @@
 ;;; overflow. The guards keep other objects off the lines we write.
 (defstruct (ddsketch (:constructor %make-ddsketch)
                      (:copier nil))
+  "Single writer, or a value: a merge target or snapshot no longer written.
+Concurrent observes and reads go through SHARDED-DDSKETCH."
   (relative-error 0d0 :type double-float :read-only t)
   (gamma 0d0 :type double-float :read-only t)
+  (log-gamma 0d0 :type double-float :read-only t)
   (inv-log-gamma 0d0 :type double-float :read-only t)
+  ;; log(2/(gamma+1)): a bucket's value is exp(key * log-gamma + log-mid)
+  (log-mid 0d0 :type double-float :read-only t)
   (min-value 0d0 :type double-float :read-only t)
   (max-value 0d0 :type double-float :read-only t)
   ;; key of bucket 1
@@ -81,23 +86,26 @@ MIN-VALUE and MAX-VALUE."
   (unless (and (realp min-value) (realp max-value) (< 1d-300 min-value max-value 1d300))
     (error 'invalid-value-error :value (cons min-value max-value)
                                 :reason "expected 1d-300 < min-value < max-value < 1d300"))
-  (let* ((alpha (coerce relative-error 'double-float))
-         (gamma (/ (+ 1 alpha) (- 1 alpha))))
-    ;; a tiny alpha rounds gamma to 1: zero-width buckets
-    (unless (> gamma 1d0)
-      (error 'invalid-value-error :value relative-error
-                                  :reason "relative error too small for double precision"))
-    (let* ((inv-log-gamma (/ 1 (log gamma)))
-           (min-key (%sketch-key inv-log-gamma min-value))
-           (max-key (%sketch-key inv-log-gamma max-value)))
-      (unless (and (< (abs min-key) +sketch-max-key+) (< (abs max-key) +sketch-max-key+))
-        (error 'invalid-value-error :value relative-error
-                                    :reason "relative error too small for this value range"))
-      (unless (<= (+ 3 (- max-key min-key)) +sketch-max-buckets+)
-        (error 'invalid-value-error :value (list relative-error min-value max-value)
-                                    :reason (format nil "more than ~a buckets, raise relative error or narrow the range"
-                                                    +sketch-max-buckets+)))
-      (values gamma inv-log-gamma min-key max-key))))
+  (flet ((fail (value reason)
+           (error 'invalid-value-error :value value :reason reason)))
+    (let ((alpha (coerce relative-error 'double-float)))
+      ;; a rational just below 1 rounds to 1d0
+      (unless (< alpha 1d0)
+        (fail relative-error "relative error too close to 1 for double precision"))
+      (let ((gamma (/ (+ 1 alpha) (- 1 alpha))))
+        ;; a tiny alpha rounds gamma to 1: zero-width buckets
+        (unless (> gamma 1d0)
+          (fail relative-error "relative error too small for double precision"))
+        (let* ((inv-log-gamma (/ 1 (log gamma)))
+               (min-key (%sketch-key inv-log-gamma min-value))
+               (max-key (%sketch-key inv-log-gamma max-value)))
+          (unless (and (< (abs min-key) +sketch-max-key+) (< (abs max-key) +sketch-max-key+))
+            (fail relative-error "relative error too small for this value range"))
+          (unless (<= (+ 3 (- max-key min-key)) +sketch-max-buckets+)
+            (fail (list relative-error min-value max-value)
+                  (format nil "more than ~a buckets, raise relative error or narrow the range"
+                          +sketch-max-buckets+)))
+          (values gamma inv-log-gamma min-key max-key))))))
 
 (defun check-ddsketch-parameters (relative-error min-value max-value &optional (shards 1))
   "Signal INVALID-VALUE-ERROR unless these would make a valid sketch."
@@ -119,7 +127,9 @@ fixed at creation: two doubles per bucket, about log(MAX-VALUE/MIN-VALUE) /
       (ddsketch-reset
        (%make-ddsketch :relative-error (coerce relative-error 'double-float)
                        :gamma gamma
+                       :log-gamma (log gamma)
                        :inv-log-gamma inv-log-gamma
+                       :log-mid (log (/ 2 (+ gamma 1)))
                        :min-value (coerce min-value 'double-float)
                        :max-value (coerce max-value 'double-float)
                        :min-key min-key
@@ -128,6 +138,12 @@ fixed at creation: two doubles per bucket, about log(MAX-VALUE/MIN-VALUE) /
                        :key-hi (coerce (1+ max-key) 'double-float)
                        :base (floor guard 2)
                        :data data)))))
+
+(defun %same-layout-p (a b)
+  "Pairs sit at the same indices: the guard follows the cache line size at
+creation, which may differ between images."
+  (and (= (ddsketch-base a) (ddsketch-base b))
+       (= (length (ddsketch-data a)) (length (ddsketch-data b)))))
 
 (defun ddsketch-compatible-p (a b)
   "True when A and B bucket values the same way, so they can be merged. The
@@ -250,24 +266,53 @@ reader that sees the count also sees real extrema."
       (incf sum (%bucket-sum sketch b)))))
 
 (defun ddsketch-min (sketch)
-  "Smallest observation, or NIL when empty."
+  "Smallest observation, or NIL when empty. On a sketch still observed into
+it may include an observation not counted yet."
   (unless (zerop (%sketch-total sketch)) (%sketch-min sketch)))
 
 (defun ddsketch-max (sketch)
   "Largest observation, or NIL when empty."
   (unless (zerop (%sketch-total sketch)) (%sketch-max sketch)))
 
+(declaim (inline %sketch-exp))
+(defun %sketch-exp (sketch key offset)
+  "exp(KEY * log(gamma) + OFFSET), clamped to finite doubles."
+  (declare (type ddsketch sketch) (type fixnum key) (type double-float offset))
+  ;; |KEY * log-gamma| stays below ~730 for a validated sketch
+  (let ((x (+ (* (coerce key 'double-float) (ddsketch-log-gamma sketch)) offset)))
+    (exp (the (double-float -745d0 709d0) (max -745d0 (min 709d0 x))))))
+
 (declaim (inline %sketch-bucket-value))
 (defun %sketch-bucket-value (sketch bucket)
+  "2 gamma^key / (gamma + 1), computed in log space so nothing overflows."
   (declare (type ddsketch sketch) (type fixnum bucket))
   (let ((last (1- (ddsketch-buckets sketch))))
     (cond ((= bucket 0) (ddsketch-min-value sketch))
           ((= bucket last) (ddsketch-max-value sketch))
-          (t (let ((gamma (ddsketch-gamma sketch))
-                   (key (+ (ddsketch-min-key sketch) (1- bucket))))
-               (/ (* 2 (exp (the (double-float -1d3 1d3)
-                                 (/ (coerce key 'double-float) (ddsketch-inv-log-gamma sketch)))))
-                  (+ gamma 1)))))))
+          (t (%sketch-exp sketch (+ (ddsketch-min-key sketch) (1- bucket))
+                          (ddsketch-log-mid sketch))))))
+
+;; slack against rounding in LOG when the key was computed
+(defconstant +edge-slack+ 1d-12)
+
+(declaim (inline %bucket-lower-edge %bucket-upper-edge))
+(defun %bucket-lower-edge (sketch bucket)
+  "No value counted in BUCKET is below this."
+  (declare (type ddsketch sketch) (type fixnum bucket))
+  (let ((last (1- (ddsketch-buckets sketch))))
+    (cond ((= bucket 0) 0d0)
+          ((= bucket last) (ddsketch-max-value sketch))
+          (t (* (- 1d0 +edge-slack+)
+                (%sketch-exp sketch (+ (ddsketch-min-key sketch) (- bucket 2)) 0d0))))))
+
+(defun %bucket-upper-edge (sketch bucket)
+  "No value counted in BUCKET is above this."
+  (declare (type ddsketch sketch) (type fixnum bucket))
+  (let ((last (1- (ddsketch-buckets sketch))))
+    (cond ((= bucket 0) (ddsketch-min-value sketch))
+          ((= bucket last) most-positive-double-float)
+          (t (* (+ 1d0 +edge-slack+)
+                (%sketch-exp sketch (+ (ddsketch-min-key sketch) (1- bucket)) 0d0))))))
 
 (defun check-quantile-buffers (qs out)
   (unless (and (typep qs 'quantile-buffer) (typep out 'quantile-buffer)
@@ -309,22 +354,31 @@ and the sum, all from the same pass over DATA."
   (let* ((m (%pair-word (ddsketch-base proto)))
          (first (+ m 2))
          (total 0d0)
-         (sum 0d0))
-    (declare (type fixnum m first) (type double-float total sum))
+         (sum 0d0)
+         (lowest -1)
+         (highest -1))
+    (declare (type fixnum m first lowest highest) (type double-float total sum))
     ;; counts before extrema: an observation's extrema are written before
     ;; its count, so counted observations always have their extrema in
     (loop for b of-type fixnum from from to to
-          do (incf total (aref data (+ first (* 2 b))))
-             (incf sum (aref data (+ first (* 2 b) 1))))
+          do (let ((c (aref data (+ first (* 2 b)))))
+               (unless (zerop c)
+                 (when (< lowest 0) (setf lowest b))
+                 (setf highest b))
+               (incf total c)
+               (incf sum (aref data (+ first (* 2 b) 1)))))
     (when (zerop total)
       (return-from %quantiles-from-data (values nil 0d0 0d0)))
-    (let ((min (aref data m))
-          (max (aref data (1+ m)))
+    ;; extrema may already include observations whose counts were not read:
+    ;; keep them within the buckets that were
+    (let ((min (max (aref data m) (%bucket-lower-edge proto lowest)))
+          (max (min (aref data (1+ m)) (%bucket-upper-edge proto highest)))
           (n (length qs))
           (qi 0)
           (seen 0d0)
           (last-rank (- total 1d0)))
       (declare (type double-float min max seen last-rank) (type fixnum n qi))
+      (when (> min max) (setf min max))
       (loop while (and (< qi n) (<= (aref qs qi) 0d0))
             do (setf (aref out qi) min) (incf qi))
       (loop for bucket of-type fixnum from from to to do
@@ -395,6 +449,8 @@ FROM may be left out. Allocates nothing."
   (unless (ddsketch-compatible-p into from)
     (error 'invalid-value-error :value from
                                 :reason "sketches were created with different parameters"))
+  ;; extrema copied below may cover observations not merged yet. Reads
+  ;; bound them by the buckets they see.
   (let ((base (ddsketch-base from)))
     (dotimes (b (ddsketch-buckets from))
       ;; most buckets are empty: skip those before the locked read
@@ -558,5 +614,8 @@ of allocating."
     (unless (ddsketch-compatible-p result (svref shards 0))
       (error 'invalid-value-error :value into
                                   :reason "sketches were created with different parameters"))
-    (%merge-shards-into shards (ddsketch-data result))
+    (if (%same-layout-p result (svref shards 0))
+        (%merge-shards-into shards (ddsketch-data result))
+        (progn (ddsketch-reset result)
+               (loop for shard across shards do (ddsketch-merge result shard))))
     result))
