@@ -51,9 +51,8 @@
 (defstruct (histogram-metric (:include metric) (:copier nil) (:predicate nil))
   (bounds nil :type (simple-array double-float (*)) :read-only t)
   (le-bounds nil :type simple-vector :read-only t)
-  ;; per shard: a word array of bucket counts, and a cell for the sum
-  (counts #() :type simple-vector :read-only t)
-  (sum-cells #() :type simple-vector :read-only t))
+  ;; per shard a stripe: the sum (integer and double), then bucket counts
+  (slab (make-slab 1) :type slab :read-only t))
 
 (defmethod mf-make-metric ((metric histogram) labels)
   (let ((shards #+sbcl (histogram-shards metric) #-sbcl 1)
@@ -62,19 +61,14 @@
      :labels labels
      :bounds (histogram-double-bounds metric)
      :le-bounds (coerce (histogram-buckets metric) 'simple-vector)
-     ;; padded so two shards' counts never share a cache line
-     :counts (coerce (loop repeat shards
-                           collect (make-array (+ n 8) :element-type 'counter-word :initial-element 0))
-                     'simple-vector)
-     :sum-cells (make-counter-cells shards))))
+     :slab (make-slab shards n))))
 
 (defmethod histogram-buckets ((metric histogram-metric))
   "Fresh BUCKET structs with counts summed over shards."
   (let ((le (histogram-metric-le-bounds metric))
-        (counts (histogram-metric-counts metric)))
+        (slab (histogram-metric-slab metric)))
     (coerce (loop for i below (length le)
-                  collect (make-bucket :bound (svref le i)
-                                       :count (loop for shard across counts sum (aref shard i))))
+                  collect (make-bucket :bound (svref le i) :count (slab-extra-sum slab i)))
             'simple-vector)))
 
 (defmethod metric-value ((metric histogram-metric))
@@ -82,13 +76,12 @@
 
 (defgeneric histogram-sum (metric)
   (:method ((metric histogram-metric))
-    (counter-cells-value (histogram-metric-sum-cells metric))))
+    (slab-value (histogram-metric-slab metric))))
 
 (defgeneric histogram-count (metric)
   (:method ((metric histogram-metric))
-    (loop for shard across (histogram-metric-counts metric)
-          sum (loop for i below (length (histogram-metric-le-bounds metric))
-                    sum (aref shard i)))))
+    (loop for i below (length (histogram-metric-le-bounds metric))
+          sum (slab-extra-sum (histogram-metric-slab metric) i))))
 
 (declaim (inline %bucket-index))
 (defun %bucket-index (bounds d)
@@ -108,8 +101,8 @@
   (unless (realp value)
     (error 'invalid-value-error :value value :reason "value is not a number"))
   (let* ((series (if (typep histogram 'histogram-metric) histogram (get-metric histogram labels)))
-         (counts (histogram-metric-counts series))
-         (shard (%current-shard-index (1- (length counts))))
+         (slab (histogram-metric-slab series))
+         (base (%slab-current-base slab))
          ;; generic COERCE returns a boxed double
          (d (typecase value
               (double-float value)
@@ -120,14 +113,15 @@
                     (%nan-value value)
                     (%bucket-index (histogram-metric-bounds series) d))))
     (declare (type histogram-metric series) (type double-float d))
+    (declare (type fixnum base index))
     #+sbcl
     (progn
-      (sb-ext:atomic-incf (aref (the (simple-array counter-word (*)) (svref counts shard)) index))
-      (%counter-cell-add (svref (histogram-metric-sum-cells series) shard) value))
+      (sb-ext:atomic-incf (aref slab (+ base 2 index)))
+      (%slab-add slab base value))
     #-sbcl
     (synchronize series
-      (incf (aref (svref counts shard) index))
-      (%counter-cell-add (svref (histogram-metric-sum-cells series) shard) value)))
+      (incf (aref slab (+ base 2 index)))
+      (%slab-add slab base value)))
   nil)
 
 (defun histogram.observe (histogram value &key labels)

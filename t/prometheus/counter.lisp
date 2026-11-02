@@ -31,6 +31,20 @@
         (is (prom:registeredp c prom:*default-registry*) c)))))
 
 (subtest "Sharded counter"
+  #+sbcl
+  (subtest "Stripes are whole lines apart"
+    (dolist (line '(64 128))
+      (dolist (extra '(0 10))
+        (dolist (lines '(1 2))
+          (let* ((slab (let ((prom::*cache-line-bytes* line) (prom::*stripe-lines* lines))
+                         (prom::make-slab 4 extra)))
+                 (hot (+ 2 extra))
+                 (bases (loop for s below 4 collect (prom::%slab-base slab s))))
+            (ok (and (>= (* 8 (- (first bases) 2)) line) ; header words 0-2
+                     ;; last hot word of a stripe to first of the next, in bytes
+                     (loop for (a b) on bases while b always (>= (* 8 (- b (+ a hot -1))) line))
+                     (>= (* 8 (- (length slab) (+ (car (last bases)) hot -1))) line))
+                (format nil "~a-byte lines, ~a extra, ~a line stripes" line extra lines)))))))
   (is-error (prom:make-counter :name "qwe" :help "" :shards 3 :registry nil) prom:invalid-value-error)
   (ok (= 1 (logcount (prom:default-shards))) "default shards is a power of two")
   (let ((prom:*default-shards* 4))

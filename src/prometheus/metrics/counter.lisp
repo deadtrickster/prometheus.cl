@@ -11,7 +11,7 @@
                        :cells (make-counter-cells (counter-shards metric))))
 
 (defstruct (counter-metric (:include simple-metric) (:copier nil) (:predicate nil))
-  (cells #() :type simple-vector :read-only t))
+  (cells (make-slab 1) :type slab :read-only t))
 
 (defmethod metric-value ((counter counter-metric))
   (counter-cells-value (counter-metric-cells counter)))
