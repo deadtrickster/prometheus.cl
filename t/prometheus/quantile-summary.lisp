@@ -90,9 +90,11 @@
       (prom:ddsketch-observe s 1d308)
       (is (prom:ddsketch-count s) 2)
       (ok (> (prom:ddsketch-sum s) most-positive-double-float) "observe"))
-    (let ((s (prom:make-sharded-ddsketch :shards 2)))
-      (prom:ddsketch-observe (svref (prom::sharded-ddsketch-shards s) 0) 1d308)
-      (prom:ddsketch-observe (svref (prom::sharded-ddsketch-shards s) 1) 1d308)
+    ;; first and last shard: two shards on SBCL, one elsewhere
+    (let* ((s (prom:make-sharded-ddsketch :shards 2))
+           (shards (prom::sharded-ddsketch-shards s)))
+      (prom:ddsketch-observe (svref shards 0) 1d308)
+      (prom:ddsketch-observe (svref shards (1- (length shards))) 1d308)
       (is (prom:sharded-ddsketch-quantile s 1) 1d308 "read across shards")
       (ok (> (prom:ddsketch-sum (prom:sharded-ddsketch-snapshot s)) most-positive-double-float) "snapshot")))
 
