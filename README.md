@@ -23,7 +23,8 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 - Gauge
 - Histogram
 - Simple Summary (without quantiles)
-- Summary (with quantiles)
+- Summary (with quantiles, CKMS via quantile-estimator)
+- Quantile Summary (DDSketch: relative-error quantiles, mergeable across series, sharded per thread and lock-free on SBCL; port of prometheus.erl's `prometheus_quantile_summary`)
 
 ## Custom collectors
 

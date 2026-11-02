@@ -29,6 +29,7 @@
                  (:test-file "int-counter")
                  (:test-file "gauge")
                  (:test-file "summary")
+                 (:test-file "quantile-summary")
                  (:test-file "histogram"))))
   :defsystem-depends-on (:prove-asdf)
   :perform (test-op :after (op c)

@@ -1,6 +1,6 @@
 (in-package #:prometheus.formats.text.test)
 
-(plan 2)
+(plan 3)
 
 (subtest "Basic test"
   (with-fresh-registry
@@ -70,6 +70,13 @@ qwe_count 4
     (let ((h (prom:make-histogram :name "probe_seconds" :help "probe" :buckets '(0.005 0.01))))
       (prom:histogram.observe h 0.005d0)
       (ok (search (format nil "probe_seconds_bucket{le=\"0.005\"} 1~%probe_seconds_bucket{le=\"0.01\"} 1~%")
+                  (prometheus.formats.text:marshal))))))
+
+(subtest "Quantile summary"
+  (with-fresh-registry
+    (let ((s (prom:make-quantile-summary :name "qwe" :help "h" :quantiles '(0.5) :min-value 1 :max-value 1000)))
+      (prom:summary.observe s 10)
+      (ok (search (format nil "qwe{quantile=\"0.5\"} 10.0~%qwe_sum 10.0~%qwe_count 1~%")
                   (prometheus.formats.text:marshal))))))
 
 (finalize)

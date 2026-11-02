@@ -29,6 +29,8 @@
            #:counter.reset
            #:int-counter
            #:make-int-counter
+           #:*default-shards*
+           #:default-shards
            #:gauge
            #:make-gauge
            #:gauge-metric
@@ -55,6 +57,38 @@
            #:make-summary
            #:summary.observe
            #:summary.time
+           #:quantile-summary
+           #:quantile-summary-metric
+           #:quantile-summary-merged-sketch
+           #:make-quantile-summary
+           ;; ddsketch
+           #:ddsketch
+           #:make-ddsketch
+           #:ddsketch-observe
+           #:ddsketch-quantile
+           #:ddsketch-count
+           #:ddsketch-sum
+           #:ddsketch-min
+           #:ddsketch-max
+           #:ddsketch-relative-error
+           #:ddsketch-merge
+           #:ddsketch-merged
+           #:ddsketch-empty-copy
+           #:ddsketch-compatible-p
+           #:sharded-ddsketch
+           #:make-sharded-ddsketch
+           #:sharded-ddsketch-observe
+           #:sharded-ddsketch-snapshot
+           #:sharded-ddsketch-count
+           #:sharded-ddsketch-sum
+           #:sharded-ddsketch-quantile
+           #:quantile-summary-sharded-sketch
+           #:with-quantile-summary-estimates
+           #:with-quantile-summary-read
+           #:ddsketch-reset
+           #:ddsketch-quantiles-into
+           #:sharded-ddsketch-quantiles-into
+           #:check-ddsketch-parameters
            ;; buckets           
            #:generate-linear-buckets
            #:generate-exponential-buckets

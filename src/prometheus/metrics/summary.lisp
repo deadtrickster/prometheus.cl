@@ -32,7 +32,9 @@
    (count :initform +summary-default+ :reader summary-count)
    (sum :initform +summary-default+ :reader summary-sum)))
 
-(defun summary-quantiles (summary)
+(defgeneric summary-quantiles (summary))
+
+(defmethod summary-quantiles ((summary summary-metric))
   (let ((estimator (summary-estimator summary)))
     (loop for quantile in (quantile-estimator:estimator-invariants estimator)
           collect (cons (quantile-quantile quantile)
