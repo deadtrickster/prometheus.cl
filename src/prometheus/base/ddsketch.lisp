@@ -199,17 +199,6 @@ the current doubles, as long as WHEN holds. Retries until the swap lands."
              (when (and (= ,ra ,wa) (= ,rb ,wb))
                (return))))))))
 
-(defmacro %+inf ()
-  #+sbcl 'sb-ext:double-float-positive-infinity
-  #+ccl 'ccl::double-float-positive-infinity
-  #-(or sbcl ccl) 'most-positive-double-float)
-
-(declaim (inline %sat+))
-(defun %sat+ (a b)
-  "A + B for non-negative doubles, +Inf instead of an overflow trap."
-  (declare (type double-float a b))
-  (if (<= a (- most-positive-double-float b)) (+ a b) (%+inf)))
-
 (declaim (inline %sketch-add))
 (defun %sketch-add (sketch bucket count sum min max)
   "Fold MIN, MAX in, then add COUNT and SUM to BUCKET. Extrema go first so a

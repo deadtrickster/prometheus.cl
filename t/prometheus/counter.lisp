@@ -53,6 +53,21 @@
       (prom:counter.reset c)
       (is (prom:metric-value c) 0)))
 
+  (subtest "Boundaries"
+    ;; one shard, so every increment lands in the same word
+    (let ((c (prom:make-counter :name "qwe" :help "" :shards 1 :registry nil)))
+      (dotimes (i 5) (prom:counter.inc c :value (expt 2 62)))
+      (is (prom:metric-value c) (coerce (* 5 (expt 2 62)) 'double-float) "integer overflow carries"))
+    (let ((c (prom:make-counter :name "qwe" :help "" :shards 1 :registry nil)))
+      (prom:counter.inc c :value 1d308)
+      (prom:counter.inc c :value 1d308)
+      (ok (> (prom:metric-value c) most-positive-double-float) "double saturates at +Inf"))
+    (let ((c (prom:make-int-counter :name "qwe" :help "" :shards 1 :registry nil)))
+      (prom:counter.inc c :value (1- (expt 2 64)))
+      (is (prom:metric-value c) (1- (expt 2 64)) "int-counter takes increments >= 2^63")
+      (prom:counter.inc c :value 5)
+      (is (prom:metric-value c) 4 "int-counter wraps as uint64")))
+
   #+sbcl
   (subtest "Nothing allocated on inc"
     (flet ((consed (thunk)
