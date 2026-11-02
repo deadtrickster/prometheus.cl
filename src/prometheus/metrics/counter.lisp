@@ -20,6 +20,10 @@
 (defun check-counter-value (value)
   (typecase value
     (fixnum (when (< value 0) (%negative-counter-value value)))
+    (double-float (cond ((%nan-p value) (%nan-value value))
+                        ((< value 0d0) (%negative-counter-value value))))
+    (float (cond ((%nan-p value) (%nan-value value))
+                 ((minusp value) (%negative-counter-value value))))
     (real (when (minusp value) (%negative-counter-value value)))
     (t (error 'invalid-value-error :value value :reason "value is not a number"))))
 
@@ -45,8 +49,20 @@ skips the label lookup."
   (%counter.inc counter value labels))
 
 ;; skip keyword parsing at call sites
-(define-compiler-macro counter.inc (counter &key (value 1) labels)
-  `(%counter.inc ,counter ,value ,labels))
+(define-compiler-macro counter.inc (&whole form counter &rest args)
+  ;; keyword arguments are evaluated in the order written; anything but a
+  ;; plain :value/:labels plist goes through the function
+  (if (and (evenp (length args))
+           (loop for (k) on args by #'cddr always (member k '(:value :labels)))
+           (= (length args) (* 2 (length (remove-duplicates (loop for (k) on args by #'cddr collect k))))))
+      (let ((c (gensym "COUNTER"))
+            (vars (loop for (k v) on args by #'cddr collect (list k (gensym (symbol-name k)) v))))
+        `(let ((,c ,counter)
+               ,@(mapcar #'rest vars))
+           (%counter.inc ,c
+                         ,(or (second (assoc :value vars)) 1)
+                         ,(second (assoc :labels vars)))))
+      form))
 
 (defgeneric counter.reset (counter &key labels)
   (:method ((counter counter) &key labels)

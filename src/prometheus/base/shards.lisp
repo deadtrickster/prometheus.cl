@@ -16,6 +16,27 @@
   #+ccl 'ccl::double-float-negative-infinity
   #-(or sbcl ccl) 'most-negative-double-float)
 
+(declaim (inline %nan-p))
+(defun %nan-p (x)
+  ;; from the bits: exponent all ones, mantissa not zero. Comparing a NaN
+  ;; traps on some SBCLs
+  (typecase x
+    #+sbcl
+    (double-float (let ((hi (sb-kernel:double-float-high-bits x)))
+                    (and (= (logand hi #x7ff00000) #x7ff00000)
+                         (or (/= 0 (logand hi #xfffff))
+                             (/= 0 (sb-kernel:double-float-low-bits x))))))
+    #+sbcl
+    (single-float (let ((bits (sb-kernel:single-float-bits x)))
+                    (and (= (logand bits #x7f800000) #x7f800000)
+                         (/= 0 (logand bits #x7fffff)))))
+    #-sbcl
+    (float (/= x x))
+    (t nil)))
+
+(defun %nan-value (value)
+  (error 'invalid-value-error :value value :reason "value is NaN"))
+
 (declaim (inline %sat+))
 (defun %sat+ (a b)
   "A + B, +/-Inf instead of an overflow trap. Neither bound computation can

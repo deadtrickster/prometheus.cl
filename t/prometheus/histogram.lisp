@@ -65,6 +65,13 @@
                            (- (sb-ext:get-bytes-consed) before)))
           0)))
 
+  #+sbcl
+  (subtest "NaN is rejected, not trapped"
+    (let ((nan (sb-int:with-float-traps-masked (:invalid)
+                 (- sb-ext:double-float-positive-infinity sb-ext:double-float-positive-infinity))))
+      (is-error (prom:histogram.observe (prom:make-histogram :name "qwe" :help "" :buckets '(1) :registry nil) nan)
+                prom:invalid-value-error)))
+
   (subtest "Single-float bounds"
     (let* ((h (prom:make-histogram :name "qwe" :help "" :buckets '(0.005 0.01) :registry nil))
            (nlm (prom:get-metric h nil)))

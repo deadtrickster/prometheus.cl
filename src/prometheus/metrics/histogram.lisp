@@ -92,7 +92,7 @@
 
 (declaim (inline %bucket-index))
 (defun %bucket-index (bounds d)
-  "First I with D <= BOUNDS[I]. The last bound is +Inf, NaN lands there too."
+  "First I with D <= BOUNDS[I]. The last bound is +Inf. D is not NaN."
   (declare (type (simple-array double-float (*)) bounds) (type double-float d))
   (let ((lo 0) (hi (1- (length bounds))))
     (declare (type fixnum lo hi))
@@ -116,7 +116,9 @@
               (fixnum (coerce value 'double-float))
               (single-float (coerce value 'double-float))
               (t (coerce value 'double-float))))
-         (index (%bucket-index (histogram-metric-bounds series) d)))
+         (index (if (%nan-p d)
+                    (%nan-value value)
+                    (%bucket-index (histogram-metric-bounds series) d))))
     (declare (type histogram-metric series) (type double-float d))
     #+sbcl
     (progn

@@ -53,6 +53,20 @@
       (prom:counter.reset c)
       (is (prom:metric-value c) 0)))
 
+  #+sbcl
+  (subtest "NaN is rejected, not trapped"
+    (let ((nan (sb-int:with-float-traps-masked (:invalid)
+                 (- sb-ext:double-float-positive-infinity sb-ext:double-float-positive-infinity))))
+      (is-error (prom:counter.inc (prom:make-counter :name "qwe" :help "" :registry nil) :value nan)
+                prom:invalid-value-error)))
+
+  (subtest "Keyword arguments evaluate in the order written"
+    (let ((c (prom:make-counter :name "qwe" :help "" :labels '("l") :registry nil))
+          (order '()))
+      (prom:counter.inc c :labels (progn (push :labels order) '("a")) :value (progn (push :value order) 2))
+      (is (reverse order) '(:labels :value) :test #'equal)
+      (is (prom:metric-value (prom:get-metric c '("a"))) 2)))
+
   (subtest "Boundaries"
     ;; one shard, so every increment lands in the same word
     (let ((c (prom:make-counter :name "qwe" :help "" :shards 1 :registry nil)))
