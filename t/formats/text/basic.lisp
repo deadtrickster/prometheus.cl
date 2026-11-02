@@ -1,6 +1,6 @@
 (in-package #:prometheus.formats.text.test)
 
-(plan 3)
+(plan #+sbcl 4 #-sbcl 3)
 
 (subtest "Basic test"
   (with-fresh-registry
@@ -78,5 +78,15 @@ qwe_count 4
       (prom:summary.observe s 10)
       (ok (search (format nil "qwe{quantile=\"0.5\"} 10.0~%qwe_sum 10.0~%qwe_count 1~%")
                   (prometheus.formats.text:marshal))))))
+
+#+sbcl
+(subtest "NaN gauge"
+  (with-fresh-registry
+    (prom:gauge.set (prom:make-gauge :name "g" :help "")
+                    (sb-int:with-float-traps-masked (:invalid)
+                      (- sb-ext:double-float-positive-infinity sb-ext:double-float-positive-infinity)))
+    (ok (search (format nil "~%g NaN~%") (prometheus.formats.text:marshal)))
+    (prom:gauge.set (prom:make-gauge :name "h" :help "") sb-ext:double-float-positive-infinity)
+    (ok (search (format nil "~%h +Inf~%") (prometheus.formats.text:marshal)))))
 
 (finalize)

@@ -18,8 +18,10 @@
         (unless (eq c collectable)
           (error 'collectable-already-registered-error :collectable collectable :registry registry :rname (collectable-name collectable))))
       (unless (gethash (collectable-name collectable) (registry-hash-table registry))
-        (setf (registry-collectables registry)
-              (append (registry-collectables registry) (list collectable))))
+        (let ((collectables (append (registry-collectables registry) (list collectable))))
+          ;; the new list is complete before COLLECT can see it
+          #+sbcl (sb-thread:barrier (:write))
+          (setf (registry-collectables registry) collectables)))
       (setf (gethash (collectable-name collectable) (registry-hash-table registry)) collectable))))
 
 (defgeneric unregister% (registry collectable)
@@ -28,8 +30,9 @@
   (:method ((registry registry) (collectable-name string))
     (synchronize registry
       (when-let ((c (gethash collectable-name (registry-hash-table registry))))
-        (setf (registry-collectables registry)
-              (remove c (registry-collectables registry))))
+        (let ((collectables (remove c (registry-collectables registry))))
+          #+sbcl (sb-thread:barrier (:write))
+          (setf (registry-collectables registry) collectables)))
       (remhash collectable-name (registry-hash-table registry)))))
 
 (defgeneric registered-p% (register collectable-designator)
