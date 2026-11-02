@@ -1,4 +1,6 @@
-# Prometheus.io Common Lisp Client [![Build Status](https://travis-ci.org/deadtrickster/prometheus.cl.svg?branch=master)](https://travis-ci.org/deadtrickster/prometheus.cl) [![Coverage Status](https://coveralls.io/repos/github/deadtrickster/prometheus.cl/badge.svg?branch=master)](https://coveralls.io/github/deadtrickster/prometheus.cl?branch=master)
+# Prometheus.io Common Lisp Client [![CI](https://github.com/deadtrickster/prometheus.cl/actions/workflows/ci.yml/badge.svg)](https://github.com/deadtrickster/prometheus.cl/actions/workflows/ci.yml)
+
+Tested on SBCL and CCL.
 
 Example Grafana dashboard for Hunchentoot on SBCL:
 
@@ -7,7 +9,7 @@ Example Grafana dashboard for Hunchentoot on SBCL:
 You can get this dashboard [here](https://raw.githubusercontent.com/deadtrickster/prometheus.cl/master/dashboards/HunchentootSBCL.json).
 
 ### Example Quick Start
-Currently example uses Linux and SBCL specific collectors. 
+Example uses the Linux process collector, plus the SBCL collectors on SBCL. 
 
 ```lisp
 (ql:quickload :prometheus.examples)
@@ -24,7 +26,7 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
 - Histogram
 - Simple Summary (without quantiles)
 - Summary (with quantiles, CKMS via quantile-estimator)
-- Quantile Summary (DDSketch: relative-error quantiles, mergeable across series, sharded per thread and lock-free on SBCL; port of prometheus.erl's `prometheus_quantile_summary`)
+- Quantile Summary (DDSketch: relative-error quantiles, mergeable across series, sharded per CPU; port of prometheus.erl's `prometheus_quantile_summary`)
 
 ## Custom collectors
 
@@ -43,28 +45,26 @@ You can override app/exporter host/port in `prometheus.example:run` arguments. T
  
 Linux? only
 
-## Performance / Optimization
+## Performance
 
-### Counter
-On SBCL counter can use CAS. On SBCL int counter can use atomic-incf.
+Hot paths allocate nothing and use no CLOS. Resolve a series once and keep it - this skips the label lookup:
 
-Benchmark (30 threads each doing 100000 counter.inc):
+```lisp
+(defvar *requests* (prom:get-metric requests-counter '("get")))
+(prom:counter.inc *requests*)
+```
 
-| Method        | Avg inc n/s |
-| ------------- |:-----------:|
-| Mutex         | 7885        |
-| CAS (SBCL)    | 1902        |
-| ATOMIC (SBCL) | 141         |
+Counters, histograms and quantile summaries are sharded per CPU, so threads on different CPUs do not contend. Label lookups are lock-free.
 
-### Gauge
-On SBCL gauge can use CAS.
+SBCL 2.6.10, 4 CPUs, 32 threads, million ops/s:
 
-Benchmark (30 threads each doing 100000 gauge.set):
-
-| Method        | Avg set n/s |
-| ------------- |:-----------:|
-| Mutex         | 9618        |
-| CAS (SBCL)    | 2204        |
+| | 0.4 | now |
+|---|---|---|
+| `counter.inc` on a series | 4.2 | 55.6 |
+| `counter.inc` with labels | 1.6 | 26.3 |
+| `gauge.set` on a series, 1 thread, ns/op | 59.6 | 8.0 |
+| `histogram.observe` on a series | 2.5 | 50.0 |
+| summary observe (CKMS -> DDSketch) | 0.3 | 19.2 |
 
 ## Exposers
 

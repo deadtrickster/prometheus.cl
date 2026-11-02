@@ -2,14 +2,12 @@
 
 (define-constant +content-type+ "text/plain; version=0.0.4" :test #'equal)
 
-(defmethod catch-strange-float (value)
-  value)
-
-(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-positive-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-POSITIVE-INFINITY #+lispworks +1D++0)))
-  "+Inf")
-
-(defmethod catch-strange-float ((value (eql #+sbcl sb-ext:double-float-negative-infinity #+(and ecl ieee-floating-point) EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY #+lispworks -1D++0)))
-  "-Inf")
+(defun catch-strange-float (value)
+  (cond ((not (floatp value)) value)
+        ((prom::%nan-p value) "NaN")
+        ((= value prom::+double-positive-infinity+) "+Inf")
+        ((= value prom::+double-negative-infinity+) "-Inf")
+        (t value)))
 
 (defun print-sample-line (stream name lables lvalues value)
   (let ((*read-default-float-format* 'double-float))
@@ -17,7 +15,9 @@
                                                                             (list lname (cond
                                                                                           ((stringp lvalue) (escape-label-value lvalue))
                                                                                           ((floatp lvalue) (format nil "~F" lvalue))
-                                                                                          (t lvalue)))) lables lvalues) (if (floatp value) (coerce value 'double-float) value))))
+                                                                                          (t lvalue)))) lables lvalues)
+            ;; NaN and the infinities as the format spells them
+            (catch-strange-float (if (floatp value) (coerce value 'double-float) value)))))
 
 (defun summary-to-text (metric name labels stream)
   (let ((q-labels (append labels (list "quantile"))))

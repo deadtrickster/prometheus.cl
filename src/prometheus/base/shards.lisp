@@ -6,6 +6,45 @@
 
 (deftype counter-word () #+sbcl 'sb-ext:word #-sbcl '(unsigned-byte 64))
 
+(defmacro %+inf ()
+  #+sbcl 'sb-ext:double-float-positive-infinity
+  #+ccl 'ccl::double-float-positive-infinity
+  #-(or sbcl ccl) 'most-positive-double-float)
+
+(defmacro %-inf ()
+  #+sbcl 'sb-ext:double-float-negative-infinity
+  #+ccl 'ccl::double-float-negative-infinity
+  #-(or sbcl ccl) 'most-negative-double-float)
+
+(declaim (inline %nan-p))
+(defun %nan-p (x)
+  ;; from the bits: exponent all ones, mantissa not zero. Comparing a NaN
+  ;; traps on some SBCLs
+  (typecase x
+    #+sbcl
+    (double-float (let ((hi (sb-kernel:double-float-high-bits x)))
+                    (and (= (logand hi #x7ff00000) #x7ff00000)
+                         (or (/= 0 (logand hi #xfffff))
+                             (/= 0 (sb-kernel:double-float-low-bits x))))))
+    #+sbcl
+    (single-float (let ((bits (sb-kernel:single-float-bits x)))
+                    (and (= (logand bits #x7f800000) #x7f800000)
+                         (/= 0 (logand bits #x7fffff)))))
+    #-sbcl
+    (float (/= x x))
+    (t nil)))
+
+(defun %nan-value (value)
+  (error 'invalid-value-error :value value :reason "value is NaN"))
+
+(declaim (inline %sat+))
+(defun %sat+ (a b)
+  "A + B, +/-Inf instead of an overflow trap. Neither bound computation can
+overflow: B's sign keeps it inside the double range."
+  (declare (type double-float a b))
+  (cond ((>= b 0d0) (if (<= a (- most-positive-double-float b)) (+ a b) (%+inf)))
+        (t (if (>= a (- most-negative-double-float b)) (+ a b) (%-inf)))))
+
 (defun check-shards (shards)
   (unless (and (typep shards '(integer 1 1024)) (= 1 (logcount shards)))
     (error 'invalid-value-error :value shards :reason "shards should be a power of two in [1, 1024]")))
@@ -188,3 +227,87 @@ evaluated with OLD bound to the current double, as long as WHEN holds."
          (unless ,when (return))
          (when (= ,bits (sb-ext:compare-and-swap (,accessor ,object) ,bits (%d->w ,new-form)))
            (return))))))
+
+
+;;; Counter shards. Hot words first, padded to a cache line so two shards'
+;;; hot words never share one.
+(defstruct (counter-cell (:constructor make-counter-cell ())
+                         (:copier nil)
+                         (:predicate nil))
+  (integer 0 :type counter-word)
+  #+sbcl (double-bits 0 :type sb-ext:word)
+  #-sbcl (double 0d0 :type double-float)
+  (pad0 0 :type counter-word) (pad1 0 :type counter-word) (pad2 0 :type counter-word)
+  (pad3 0 :type counter-word) (pad4 0 :type counter-word) (pad5 0 :type counter-word))
+
+(defun make-counter-cells (shards)
+  "A simple-vector of SHARDS counter cells, one shard elsewhere than SBCL."
+  (check-shards shards)
+  (let ((cells (make-array #+sbcl shards #-sbcl 1)))
+    (dotimes (i (length cells) cells)
+      (setf (svref cells i) (make-counter-cell)))))
+
+(declaim (inline %counter-cell-double))
+(defun %counter-cell-double (cell)
+  #+sbcl (%w->d (counter-cell-double-bits cell))
+  #-sbcl (counter-cell-double cell))
+
+(declaim (inline %counter-cell-add))
+(defun %counter-cell-add (cell n &optional (carry t))
+  "Add real N to CELL. Non-negative integers go to the integer word: with
+CARRY its overflow moves 2^64 to the double, without it wraps (uint64). The
+rest goes to the double, which saturates at +/-Inf. Allocates nothing for
+fixnums and doubles. Elsewhere than SBCL the caller holds a lock."
+  (declare (type counter-cell cell) (optimize speed))
+  (labels ((add-double (d)
+             (declare (type double-float d))
+             #+sbcl (%cas-double-bits (old counter-cell-double-bits cell) (%sat+ old d))
+             #-sbcl (setf (counter-cell-double cell) (%sat+ (counter-cell-double cell) d)))
+           (add-integer (i)
+             (declare (type counter-word i))
+             (let ((old #+sbcl
+                        ;; ATOMIC-INCF takes a signed delta: the same add modulo 2^64
+                        (sb-ext:atomic-incf (counter-cell-integer cell)
+                                            (if (logbitp 63 i) (- i (ash 1 64)) i))
+                        #-sbcl
+                        (prog1 (counter-cell-integer cell)
+                          (setf (counter-cell-integer cell)
+                                (ldb (byte 64 0) (+ (counter-cell-integer cell) i))))))
+               (declare (type counter-word old))
+               (when (and carry (< (- (ldb (byte 64 0) -1) old) i))
+                 (add-double 1.8446744073709552d19)))))
+    (declare (inline add-integer add-double))
+    ;; generic COERCE returns a boxed double
+    (typecase n
+      ((integer 0 #.most-positive-fixnum) (add-integer n))
+      (counter-word (add-integer n))
+      (double-float (add-double n))
+      (single-float (add-double (coerce n 'double-float)))
+      (t (add-double (coerce n 'double-float)))))
+  nil)
+
+(declaim (inline counter-cells-add))
+(defun counter-cells-add (cells n &optional (carry t))
+  "Add N to the current CPU's cell."
+  (declare (type simple-vector cells))
+  (%counter-cell-add (svref cells (%current-shard-index (1- (length cells)))) n carry))
+
+(defun counter-cells-value (cells)
+  "Sum over shards: an integer while only non-negative integers were added."
+  (let ((integer 0)
+        (double 0d0)
+        (any-double nil))
+    (loop for cell across cells
+          do (incf integer (counter-cell-integer cell))
+             (let ((d (%counter-cell-double cell)))
+               (unless (zerop d) (setf any-double t))
+               (setf double (%sat+ double d))))
+    (if any-double (+ integer double) integer)))
+
+(defun counter-cells-reset (cells)
+  "Zero all shards. Not atomic against concurrent adds."
+  (loop for cell across cells
+        do (setf (counter-cell-integer cell) 0)
+           #+sbcl (setf (counter-cell-double-bits cell) 0)
+           #-sbcl (setf (counter-cell-double cell) 0d0))
+  cells)

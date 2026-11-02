@@ -46,7 +46,7 @@
     collector))
 
 (defun get-open-fds-count ()
-  (length (cl-fad:list-directory "/proc/self/fd")))
+  (length (cl-fad:list-directory "/proc/self/fd" :follow-symlinks nil)))
 
 (defun get-max-fds-count ()
   (when-let ((info-line

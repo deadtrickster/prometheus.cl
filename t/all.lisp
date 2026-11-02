@@ -4,19 +4,19 @@
 
 (in-package #:prometheus.test.all)
 
-(defun run-all ()
-  (every (lambda (c)
-           (prove:run c))
-         (asdf:system-depends-on (asdf:find-system :prometheus.test.all))))
+(defun test-systems ()
+  ;; resolve (:feature f system) entries
+  (loop for dep in (asdf:system-depends-on (asdf:find-system :prometheus.test.all))
+        when (atom dep) collect dep
+        else when (and (eq (first dep) :feature) (uiop:featurep (second dep)))
+               collect (third dep)))
 
-(defun run-all-ci ()
-  (let ((result))
-    (coveralls:with-coveralls (:exclude '("t" "examples" "benchmark"))
-      (setf result (run-all)))
-    (unless result
-      (uiop:quit 1))))
+(defun run-all ()
+  ;; run every system, do not stop at the first failure
+  (every #'identity (mapcar #'prove:run (test-systems))))
 
 (defun run (&key ci)
-  (if ci
-      (run-all-ci)
-      (run-all)))
+  (let ((ok (run-all)))
+    (when ci
+      (uiop:quit (if ok 0 1)))
+    ok))

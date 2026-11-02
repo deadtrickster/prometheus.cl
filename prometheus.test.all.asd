@@ -11,8 +11,7 @@
                "prometheus.pushgateway.test"
                "prometheus.exposers.hunchentoot.test"
                "prometheus.collectors.process.test"
-               "prometheus.collectors.sbcl.test"
-               "cl-coveralls")
+               (:feature :sbcl "prometheus.collectors.sbcl.test"))
   :serial t
   :components ((:file "t/all"))
   :defsystem-depends-on (:prove-asdf)

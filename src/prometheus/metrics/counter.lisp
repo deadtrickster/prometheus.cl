@@ -3,37 +3,66 @@
 (define-constant +counter-default+ 0)
 
 (defclass counter (metric-family)
-  ()
+  ((shards :initarg :shards :initform (default-shards) :reader counter-shards))
   (:default-initargs :type "counter"))
 
 (defmethod mf-make-metric ((metric counter) labels)
-  (make-instance 'counter-metric :labels labels))
+  (make-counter-metric :labels labels
+                       :cells (make-counter-cells (counter-shards metric))))
 
-(defclass counter-metric (simple-metric)
-  ((value :initform +counter-default+)))
+(defstruct (counter-metric (:include simple-metric) (:copier nil) (:predicate nil))
+  (cells #() :type simple-vector :read-only t))
 
+(defmethod metric-value ((counter counter-metric))
+  (counter-cells-value (counter-metric-cells counter)))
+
+(declaim (inline check-counter-value))
 (defun check-counter-value (value)
-  (unless (numberp value)
-    (error 'invalid-value-error :value value :reason "value is not a number"))
-  (when (< value 0)
-    (error 'invalid-value-error :value value :reason "counters can only be incremented by non-negative amounts")))
+  (typecase value
+    (fixnum (when (< value 0) (%negative-counter-value value)))
+    (double-float (cond ((%nan-p value) (%nan-value value))
+                        ((< value 0d0) (%negative-counter-value value))))
+    (float (cond ((%nan-p value) (%nan-value value))
+                 ((minusp value) (%negative-counter-value value))))
+    (real (when (minusp value) (%negative-counter-value value)))
+    (t (error 'invalid-value-error :value value :reason "value is not a number"))))
 
-(defgeneric counter.inc% (counter n labels)
-  (:method ((counter counter) n labels)
-    (let ((metric (get-metric counter labels)))
-      (counter.inc% metric n labels)))
-  (:method ((counter counter-metric) n labels)
-    (declare (ignore labels)
-             (optimize (speed 3) (debug 0) (safety 0)))
-    #-(or sbcl lispworks)
-    (synchronize counter
-      (incf (slot-value counter 'value) n))
-    #+(or sbcl lispworks)
-    (cas-incf (slot-value counter 'value) n)))
+(defun %negative-counter-value (value)
+  (error 'invalid-value-error :value value :reason "counters can only be incremented by non-negative amounts"))
+
+(defun %counter.inc (counter value labels)
+  (declare (optimize speed))
+  (check-counter-value value)
+  (let ((series (if (typep counter 'counter-metric) counter (get-metric counter labels))))
+    (declare (type counter-metric series))
+    (let ((int (typep series 'int-counter-metric)))
+      (when (and int (not (typep value '(unsigned-byte 64))))
+        (error 'invalid-value-error :value value :reason "value is not an uint64"))
+      ;; int-counter wraps as uint64, counter carries into its double part
+      #+sbcl (counter-cells-add (counter-metric-cells series) value (not int))
+      #-sbcl (synchronize series (counter-cells-add (counter-metric-cells series) value (not int))))
+    nil))
 
 (defun counter.inc (counter &key (value 1) labels)
-  (check-counter-value value)
-  (counter.inc% counter value labels))
+  "Increment COUNTER, a family or a series from GET-METRIC. Passing the series
+skips the label lookup."
+  (%counter.inc counter value labels))
+
+;; skip keyword parsing at call sites
+(define-compiler-macro counter.inc (&whole form counter &rest args)
+  ;; keyword arguments are evaluated in the order written; anything but a
+  ;; plain :value/:labels plist goes through the function
+  (if (and (evenp (length args))
+           (loop for (k) on args by #'cddr always (member k '(:value :labels)))
+           (= (length args) (* 2 (length (remove-duplicates (loop for (k) on args by #'cddr collect k))))))
+      (let ((c (gensym "COUNTER"))
+            (vars (loop for (k v) on args by #'cddr collect (list k (gensym (symbol-name k)) v))))
+        `(let ((,c ,counter)
+               ,@(mapcar #'rest vars))
+           (%counter.inc ,c
+                         ,(or (second (assoc :value vars)) 1)
+                         ,(second (assoc :labels vars)))))
+      form))
 
 (defgeneric counter.reset (counter &key labels)
   (:method ((counter counter) &key labels)
@@ -42,13 +71,15 @@
   (:method ((counter counter-metric) &key labels)
     (declare (ignore labels))
     (synchronize counter
-      (setf (slot-value counter 'value) +counter-default+))))
+      (counter-cells-reset (counter-metric-cells counter)))))
 
-(defun make-counter (&key name help labels value (registry *default-registry*))
+(defun make-counter (&key name help labels value (shards (default-shards)) (registry *default-registry*))
   (check-value-or-labels value labels)
+  (check-shards shards)
   (let ((counter (make-instance 'counter :name name
                                          :help help
                                          :labels labels
+                                         :shards shards
                                          :registry registry)))
     (when value
       (counter.inc counter :value value))
