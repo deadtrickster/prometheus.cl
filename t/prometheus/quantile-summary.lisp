@@ -77,6 +77,25 @@
   (subtest "Bucket values are shared"
     (ok (eq (prom::ddsketch-reps (prom:make-ddsketch)) (prom::ddsketch-reps (prom:make-ddsketch)))))
 
+  (subtest "Bucket values never decrease, so estimates are monotonic in q"
+    ;; the first and last in-range buckets reach past min-value and max-value
+    (dolist (mn '(1d-9 0.0123d0 0.999d0 3d0 7.77d0))
+      (let ((r (prom::ddsketch-reps (prom:make-ddsketch :min-value mn :max-value (* mn 1000)))))
+        (ok (loop for b from 1 below (length r) always (<= (aref r (1- b)) (aref r b)))
+            (format nil "min-value ~a" mn)))))
+
+  (subtest "Sums saturate at +Inf"
+    (let ((s (prom:make-ddsketch)))
+      (prom:ddsketch-observe s 1d308)
+      (prom:ddsketch-observe s 1d308)
+      (is (prom:ddsketch-count s) 2)
+      (ok (> (prom:ddsketch-sum s) most-positive-double-float) "observe"))
+    (let ((s (prom:make-sharded-ddsketch :shards 2)))
+      (prom:ddsketch-observe (svref (prom::sharded-ddsketch-shards s) 0) 1d308)
+      (prom:ddsketch-observe (svref (prom::sharded-ddsketch-shards s) 1) 1d308)
+      (is (prom:sharded-ddsketch-quantile s 1) 1d308 "read across shards")
+      (ok (> (prom:ddsketch-sum (prom:sharded-ddsketch-snapshot s)) most-positive-double-float) "snapshot")))
+
   (subtest "Empty"
     (let ((s (prom:make-ddsketch)))
       (is (prom:ddsketch-count s) 0)
@@ -215,7 +234,7 @@
           "sharded-ddsketch-quantiles-into")
       (is (consed (lambda () (dotimes (r 5000) (prom:with-quantile-summary-estimates (q e) metric (declare (type (simple-array double-float (*)) e)) (> (aref e 0) (aref q 0)))))) 0
           "with-quantile-summary-estimates")
-      (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-snapshot sharded target)))) 0
+      (is (consed (lambda () (dotimes (r 5000) (prom:sharded-ddsketch-snapshot sharded :into target)))) 0
           "snapshot into a reused sketch"))))
 
 (subtest "Span-limited reads match a full merge"
@@ -285,7 +304,7 @@
            (bad 0))
       (unwind-protect
            (dotimes (i 200)
-             (prom:sharded-ddsketch-snapshot s target)
+             (prom:sharded-ddsketch-snapshot s :into target)
              (unless (= (prom:ddsketch-sum target) (* 2d0 (prom:ddsketch-count target)))
                (incf bad)))
         (setf stop t)
@@ -296,7 +315,7 @@
     (let* ((s (prom:make-sharded-ddsketch :shards 1))
            (shard (svref (prom::sharded-ddsketch-shards s) 0)))
       (loop for v from 1 to 10 do (prom:sharded-ddsketch-observe s v))
-      (is-error (prom:sharded-ddsketch-snapshot s shard) prom:invalid-value-error)
+      (is-error (prom:sharded-ddsketch-snapshot s :into shard) prom:invalid-value-error)
       (is (prom:ddsketch-count shard) 10)))
 
   (subtest "A snapshot into a sketch with another layout"
@@ -304,7 +323,7 @@
            (target (let ((prom::*cache-line-bytes* (* 4 prom::*cache-line-bytes*)))
                      (prom:make-ddsketch))))
       (loop for v from 1 to 1000 do (prom:sharded-ddsketch-observe s v))
-      (prom:sharded-ddsketch-snapshot s target)
+      (prom:sharded-ddsketch-snapshot s :into target)
       (is (prom:ddsketch-count target) 1000)
       (is (prom:ddsketch-sum target) 500500d0)
       (is (prom:ddsketch-quantile target 1) 1000d0))))

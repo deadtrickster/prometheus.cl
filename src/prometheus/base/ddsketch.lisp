@@ -199,6 +199,17 @@ the current doubles, as long as WHEN holds. Retries until the swap lands."
              (when (and (= ,ra ,wa) (= ,rb ,wb))
                (return))))))))
 
+(defmacro %+inf ()
+  #+sbcl 'sb-ext:double-float-positive-infinity
+  #+ccl 'ccl::double-float-positive-infinity
+  #-(or sbcl ccl) 'most-positive-double-float)
+
+(declaim (inline %sat+))
+(defun %sat+ (a b)
+  "A + B for non-negative doubles, +Inf instead of an overflow trap."
+  (declare (type double-float a b))
+  (if (<= a (- most-positive-double-float b)) (+ a b) (%+inf)))
+
 (declaim (inline %sketch-add))
 (defun %sketch-add (sketch bucket count sum min max)
   "Fold MIN, MAX in, then add COUNT and SUM to BUCKET. Extrema go first so a
@@ -210,15 +221,15 @@ reader that sees the count also sees real extrema."
     (progn
       (%cas-pair-loop (lo hi data base) ((min lo min) (max hi max))
                       :when (or (< min lo) (> max hi)))
-      (%cas-pair-loop (c s data (+ base 1 bucket)) ((+ c count) (+ s sum))))
+      (%cas-pair-loop (c s data (+ base 1 bucket)) ((%sat+ c count) (%sat+ s sum))))
     #-prometheus-cas-pair
     (%with-sketch-locked (sketch)
       (let ((m (%pair-word base))
             (w (%pair-word (+ base 1 bucket))))
         (when (< min (aref data m)) (setf (aref data m) min))
         (when (> max (aref data (1+ m))) (setf (aref data (1+ m)) max))
-        (incf (aref data w) count)
-        (incf (aref data (1+ w)) sum))))
+        (setf (aref data w) (%sat+ (aref data w) count)
+              (aref data (1+ w)) (%sat+ (aref data (1+ w)) sum)))))
   nil)
 
 (declaim (inline %ddsketch-observe-double))
@@ -260,8 +271,9 @@ reader that sees the count also sees real extrema."
 
 (declaim (inline %count->integer))
 (defun %count->integer (count)
-  ;; counts stay exact integers in a double up to 2^53
-  (values (truncate (the (double-float 0d0 9.007199254740992d15) count))))
+  ;; counts are exact integers in a double up to 2^53, beyond that they
+  ;; stop growing by one. The bound keeps TRUNCATE a fixnum.
+  (values (truncate (the (double-float 0d0 4.6d18) (min count 4.6d18)))))
 
 (defun ddsketch-count (sketch)
   (%count->integer (%sketch-total sketch)))
@@ -272,7 +284,7 @@ reader that sees the count also sees real extrema."
   (let ((sum 0d0))
     (declare (type double-float sum))
     (dotimes (b (ddsketch-buckets sketch) sum)
-      (incf sum (%bucket-sum sketch b)))))
+      (setf sum (%sat+ sum (%bucket-sum sketch b))))))
 
 (defun ddsketch-min (sketch)
   "Smallest observation, or NIL when empty. On a sketch still observed into
@@ -294,8 +306,13 @@ it may include an observation not counted yet."
       (setf (aref reps b)
             (cond ((= b 0) (ddsketch-min-value proto))
                   ((= b last) (ddsketch-max-value proto))
-                  (t (exp (+ (* (+ (ddsketch-min-key proto) b -1) (ddsketch-log-gamma proto))
-                             log-mid))))))))
+                  ;; in-range buckets only hold values in [min-value,
+                  ;; max-value]: clamping the edge buckets there keeps the
+                  ;; table increasing, so estimates are monotonic in q
+                  (t (max (ddsketch-min-value proto)
+                          (min (ddsketch-max-value proto)
+                               (exp (+ (* (+ (ddsketch-min-key proto) b -1) (ddsketch-log-gamma proto))
+                                       log-mid))))))))))
 
 (defvar *sketch-reps* (make-hash-table :test 'equal))
 (defvar *sketch-reps-lock* (bt:make-lock "prometheus ddsketch bucket values"))
@@ -360,7 +377,7 @@ and the sum, all from the same pass over DATA."
                  (when (< lowest 0) (setf lowest b))
                  (setf highest b))
                (incf total c)
-               (incf sum (aref data (+ first (* 2 b) 1)))))
+               (setf sum (%sat+ sum (aref data (+ first (* 2 b) 1))))))
     (when (zerop total)
       (return-from %quantiles-from-data (values nil 0d0 0d0)))
     ;; extrema are written before counts, so they may come from an
@@ -548,20 +565,23 @@ min only falls and max only rises. Buckets outside are exactly zero."
                    (let ((src (ddsketch-data shard)))
                      #+prometheus-cas-pair
                      (if **atomic-pair-load**
-                         ;; same instructions for every bucket in the span
-                         (loop for p of-type fixnum from (+ first-pair lo) to (+ first-pair hi)
-                               do (%pair-add data p src p))
+                         ;; same instructions for every bucket in the span. ADDPD
+                         ;; cannot saturate per lane: a sum past the largest
+                         ;; double becomes +Inf instead of trapping
+                         (sb-int:with-float-traps-masked (:overflow :inexact)
+                           (loop for p of-type fixnum from (+ first-pair lo) to (+ first-pair hi)
+                                 do (%pair-add data p src p)))
                          (loop for b of-type fixnum from lo to hi
                                unless (zerop (%bucket-count shard b))
                                  do (multiple-value-bind (c sum) (%read-pair shard (+ first-pair b))
                                       (let ((w (%pair-word (+ first-pair b))))
-                                        (incf (aref data w) c)
-                                        (incf (aref data (1+ w)) sum)))))
+                                        (setf (aref data w) (%sat+ (aref data w) c)
+                                              (aref data (1+ w)) (%sat+ (aref data (1+ w)) sum))))))
                      #-prometheus-cas-pair
                      (%with-sketch-locked (shard)
                        (loop for w of-type fixnum from (%pair-word (+ first-pair lo))
                                below (%pair-word (+ first-pair hi 1))
-                             do (incf (aref data w) (aref src w)))))))))
+                             do (setf (aref data w) (%sat+ (aref data w) (aref src w))))))))))
     ;; extrema again after the buckets, so they cover every count summed
     (let ((min most-positive-double-float) (max 0d0))
       (declare (type double-float min max))
@@ -620,13 +640,16 @@ read lock. Values never leave the locked region, so nothing is boxed."
          sum (%sketch-total shard) of-type double-float)))
 
 (defun sharded-ddsketch-sum (sketch)
-  (loop for shard across (sharded-ddsketch-shards sketch)
-        sum (ddsketch-sum shard) of-type double-float))
+  (let ((sum 0d0))
+    (declare (type double-float sum))
+    (loop for shard across (sharded-ddsketch-shards sketch)
+          do (setf sum (%sat+ sum (ddsketch-sum shard))))
+    sum))
 
-(defun sharded-ddsketch-snapshot (sketch &optional into)
+(defun sharded-ddsketch-snapshot (sketch &key into)
   "A DDSKETCH holding every observation made so far, all shards merged. With
 INTO (a compatible sketch, not observed into meanwhile) it is reused instead
-of allocating."
+of allocating, the same keyword as QUANTILE-SUMMARY-MERGED-SKETCH."
   (let* ((shards (sharded-ddsketch-shards sketch))
          (result (or into (ddsketch-empty-copy (svref shards 0)))))
     (check-merge-target result shards)

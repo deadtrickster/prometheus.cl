@@ -43,7 +43,7 @@ Nothing is allocated on the hot paths:
 
 - Observe - two 16-byte CAS, no boxed doubles
 - Read - quantiles are computed in one pass over all shards, written into caller buffers (`ddsketch-quantiles-into`, `sharded-ddsketch-quantiles-into`). Each series owns a scrape buffer used by `with-quantile-summary-estimates`.
-- Merge - `ddsketch-reset` makes any sketch a reusable target. `sharded-ddsketch-snapshot` and `quantile-summary-merged-sketch` take `:into`.
+- Merge - `ddsketch-reset` makes any sketch a reusable target. `sharded-ddsketch-snapshot` and `quantile-summary-merged-sketch` take `:into`. Sums saturate at `+Inf` instead of trapping.
 
 The tests check zero bytes consed on these paths.
 
